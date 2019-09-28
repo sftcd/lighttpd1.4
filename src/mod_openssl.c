@@ -71,8 +71,9 @@ typedef struct {
     buffer *ssl_pemfile;
     buffer *ssl_privkey;
 #ifndef OPENSSL_NO_ESNI
-    buffer *ssl_esnikeydir;
-    unsigned short ssl_esnimaxage;
+    buffer *ssl_esnikeydir; /* an absolute directory name - see load_esnikeys() for more */
+    unsigned short ssl_esnimaxage; /* default to 0/infinite, others a number of seconds */
+    buffer *ssl_esnitrialdecrypt; /* "enable" to set, anything else or missing to unset */
 #endif
     buffer *ssl_ca_file;
     buffer *ssl_ca_crl_file;
@@ -151,6 +152,7 @@ FREE_FUNC(mod_openssl_free)
 #ifndef OPENSSL_NO_ESNI
             buffer_free(s->ssl_esnikeydir);
             s->ssl_esnimaxage=0;
+            buffer_free(s->ssl_esnitrialdecrypt);
 #endif
             buffer_free(s->ssl_ca_file);
             buffer_free(s->ssl_ca_crl_file);
@@ -1098,6 +1100,16 @@ network_init_ssl (server *srv, void *p_d)
             log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: Not loading esnikeydir for config item", i);
         }
+
+        /* if value is exactly "enable" then turn on trial decryption */
+        if (buffer_is_equal_string(s->ssl_esnitrialdecrypt,"enable",strlen("enable"))) {
+            log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: Doing trial decryption for config item", i);
+            SSL_CTX_set_options(s->ssl_ctx,SSL_OP_ESNI_TRIALDECRYPT);
+        } else {
+            log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: Not doing trial decryption config item", i);
+        }
 #endif
 
       #ifndef OPENSSL_NO_DH
@@ -1345,6 +1357,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
 #ifndef OPENSSL_NO_ESNI
         { "ssl.esnikeydir",                    NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 23 */
         { "ssl.esnimaxage",                    NULL, T_CONFIG_SHORT,  T_CONFIG_SCOPE_CONNECTION }, /* 24 */
+        { "ssl.esnitrialdecrypt",              NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 25 */
 #endif
         { NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
     };
@@ -1363,6 +1376,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
 #ifndef OPENSSL_NO_ESNI
         s->ssl_esnikeydir   = buffer_init();
         s->ssl_esnimaxage  = 0;
+        s->ssl_esnitrialdecrypt  = buffer_init();
 #endif
         s->ssl_ca_file   = buffer_init();
         s->ssl_ca_crl_file = buffer_init();
@@ -1428,6 +1442,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
 #ifndef OPENSSL_NO_ESNI
         cv[23].destination = s->ssl_esnikeydir;
         cv[24].destination = &(s->ssl_esnimaxage);
+        cv[25].destination = s->ssl_esnitrialdecrypt;
 #endif
 
         p->config_storage[i] = s;
@@ -1526,10 +1541,13 @@ mod_openssl_patch_connection (server *srv, connection *con, handler_ctx *hctx)
                 PATCH(ssl_pemfile_x509);
                 PATCH(ssl_pemfile_pkey);
 #ifndef OPENSSL_NO_ESNI
+            /* TODO: check this out - I have no clue what this code is or if it's needed */
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnikeydir"))) {
                 PATCH(ssl_esnikeydir);
-            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnmaxage"))) {
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnimaxage"))) {
                 PATCH(ssl_esnimaxage);
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnitrialdecrypt"))) {
+                PATCH(ssl_esnitrialdecrypt);
 #endif
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.ca-file"))) {
                 PATCH(ssl_ca_file);
