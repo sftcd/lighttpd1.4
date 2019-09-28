@@ -3,6 +3,14 @@
 lighttpd
 ========
 
+This fork (https://github.com/sftcd/lighttpd1.4) adds OpenSSL Encrypted SNI
+support using an early OpenSSL fork (https://github.com/sftcd/openssl) that
+implements that as part of the DEfO project (https://defo.ie). It's really
+VERY early days - this hasn't been tested at all, so please do not use this
+for production services. For notes as to status please see:
+
+https://github.com/sftcd/openssl/blob/master/esnistuff/lighttpd.md
+
 -------------
 a light httpd
 -------------

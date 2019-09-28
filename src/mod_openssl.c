@@ -38,6 +38,13 @@
 #include "log.h"
 #include "plugin.h"
 
+#ifndef OPENSSL_NO_ESNI
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <openssl/esni.h>
+#endif
+
 typedef struct {
     SSL_CTX *ssl_ctx; /* not patched */
     /* SNI per host: with COMP_SERVER_SOCKET, COMP_HTTP_SCHEME, COMP_HTTP_HOST */
@@ -63,6 +70,10 @@ typedef struct {
     unsigned short ssl_use_sslv3;
     buffer *ssl_pemfile;
     buffer *ssl_privkey;
+#ifndef OPENSSL_NO_ESNI
+    buffer *ssl_esnikeydir;
+    unsigned short ssl_esnimaxage;
+#endif
     buffer *ssl_ca_file;
     buffer *ssl_ca_crl_file;
     buffer *ssl_ca_dn_file;
@@ -137,6 +148,10 @@ FREE_FUNC(mod_openssl_free)
             copy = s->ssl_enabled && buffer_string_is_empty(s->ssl_pemfile);
             buffer_free(s->ssl_pemfile);
             buffer_free(s->ssl_privkey);
+#ifndef OPENSSL_NO_ESNI
+            buffer_free(s->ssl_esnikeydir);
+            s->ssl_esnimaxage=0;
+#endif
             buffer_free(s->ssl_ca_file);
             buffer_free(s->ssl_ca_crl_file);
             buffer_free(s->ssl_ca_dn_file);
@@ -773,6 +788,84 @@ network_openssl_ssl_conf_cmd (server *srv, plugin_config *s)
   #endif
 }
 
+#ifndef OPENSSL_NO_ESNI
+/* 
+ * load any key files we find in the ssl_esnikeydir directory 
+ * where there are matching <name>.pub and <name>.priv files
+ * that match and that are not older than ssl_esnimaxage seconds
+ * (maxage==0 means load all found)
+ */
+static int load_esnikeys(server *srv, plugin_config *s)
+{
+    /*
+     * Try load any good looking public/private ESNI values found in files in that directory
+     * TODO: Find a more lighttpd-like way of reading a directory.
+     *
+     * This code is derived from what I added to openssl s_server, which you can find
+     * in apps/s_server.c in my openssl fork, https://github.com/sftcd/openssl
+     */
+    char *esnidir=(char*)s->ssl_esnikeydir->ptr;
+    time_t maxage=(time_t)s->ssl_esnimaxage;
+    log_error_write(srv, __FILE__, __LINE__, "sssd", 
+            "load_esnikeys:  ", esnidir,
+            "maxage: ", maxage);
+
+    size_t elen=strlen(esnidir);
+    if ((elen+7) >= PATH_MAX) {
+        log_error_write(srv, __FILE__, __LINE__, "sb", 
+            "load_esnikeys, error, name too long:  ", s->ssl_esnikeydir);
+        return -1;
+    }
+    DIR *dp;
+    struct dirent *ep;
+    dp=opendir(esnidir);
+    if (dp==NULL) {
+        log_error_write(srv, __FILE__, __LINE__, "sb", 
+            "load_esnikeys, can't read directory:  ", s->ssl_esnikeydir);
+        return -1;
+    }
+    while ((ep=readdir(dp))!=NULL) {
+        char privname[PATH_MAX];
+        char pubname[PATH_MAX];
+        /*
+         * If the file name matches *.priv, then check for matching *.pub and try enable that pair
+         */
+        size_t nlen=strlen(ep->d_name);
+        if (nlen>5) {
+            char *last5=ep->d_name+nlen-5;
+            if (strncmp(last5,".priv",5)) {
+                continue;
+            }
+            if ((elen+nlen)>=PATH_MAX) {
+                closedir(dp);
+                log_error_write(srv, __FILE__, __LINE__, "ss", 
+                    "load_esnikeys, error, file name too long:  ", ep->d_name);
+                return -1;
+            }
+            snprintf(privname,PATH_MAX,"%s/%s",esnidir,ep->d_name);
+            snprintf(pubname,PATH_MAX,"%s/%s",esnidir,ep->d_name);
+            pubname[elen+1+nlen-3]='u';
+            pubname[elen+1+nlen-2]='b';
+            pubname[elen+1+nlen-1]=0x00;
+            struct stat thestat;
+            if (stat(pubname,&thestat)==0 && stat(privname,&thestat)==0) {
+                if (SSL_esni_server_enable(s->ssl_ctx,privname,pubname)!=1) {
+                    log_error_write(srv, __FILE__, __LINE__, "s", 
+                        "load_esnikeys, SSL_esni_server_enable failed" );
+                    return -1;
+                } else {
+                    log_error_write(srv, __FILE__, __LINE__, "ss", 
+                        "load_esnikeys worked for ", pubname );
+                }
+            }
+        }
+    }
+    closedir(dp);
+
+    return 0;
+}
+#endif
+
 
 static int
 network_init_ssl (server *srv, void *p_d)
@@ -989,6 +1082,23 @@ network_init_ssl (server *srv, void *p_d)
                 SSL_CTX_set_options(s->ssl_ctx,SSL_OP_CIPHER_SERVER_PREFERENCE);
             }
         }
+
+#ifndef OPENSSL_NO_ESNI
+        if (!buffer_string_is_empty(s->ssl_esnikeydir)) {
+            log_error_write(srv, __FILE__, __LINE__, "sbsd", 
+                    "SSL: loading esnikeydir ", s->ssl_esnikeydir, 
+                    "for config item", i);
+            int rv= load_esnikeys(srv,s);
+            if (rv) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: load_esnikeys failed returning ", rv);
+                return -1;
+            }
+        } else {
+            log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: Not loading esnikeydir for config item", i);
+        }
+#endif
 
       #ifndef OPENSSL_NO_DH
       {
@@ -1232,6 +1342,10 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         { "ssl.openssl.ssl-conf-cmd",          NULL, T_CONFIG_ARRAY,   T_CONFIG_SCOPE_CONNECTION }, /* 20 */
         { "ssl.acme-tls-1",                    NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 21 */
         { "ssl.privkey",                       NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 22 */
+#ifndef OPENSSL_NO_ESNI
+        { "ssl.esnikeydir",                    NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 23 */
+        { "ssl.esnimaxage",                    NULL, T_CONFIG_SHORT,  T_CONFIG_SCOPE_CONNECTION }, /* 24 */
+#endif
         { NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
     };
 
@@ -1246,6 +1360,10 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         s->ssl_enabled   = 0;
         s->ssl_pemfile   = buffer_init();
         s->ssl_privkey   = buffer_init();
+#ifndef OPENSSL_NO_ESNI
+        s->ssl_esnikeydir   = buffer_init();
+        s->ssl_esnimaxage  = 0;
+#endif
         s->ssl_ca_file   = buffer_init();
         s->ssl_ca_crl_file = buffer_init();
         s->ssl_ca_dn_file = buffer_init();
@@ -1307,6 +1425,10 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         cv[20].destination = s->ssl_conf_cmd;
         cv[21].destination = s->ssl_acme_tls_1;
         cv[22].destination = s->ssl_privkey;
+#ifndef OPENSSL_NO_ESNI
+        cv[23].destination = s->ssl_esnikeydir;
+        cv[24].destination = &(s->ssl_esnimaxage);
+#endif
 
         p->config_storage[i] = s;
 
@@ -1403,6 +1525,12 @@ mod_openssl_patch_connection (server *srv, connection *con, handler_ctx *hctx)
                 /*PATCH(ssl_privkey);*//*(not patched)*/
                 PATCH(ssl_pemfile_x509);
                 PATCH(ssl_pemfile_pkey);
+#ifndef OPENSSL_NO_ESNI
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnikeydir"))) {
+                PATCH(ssl_esnikeydir);
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnmaxage"))) {
+                PATCH(ssl_esnimaxage);
+#endif
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.ca-file"))) {
                 PATCH(ssl_ca_file);
                 PATCH(ssl_ca_file_cert_names);
