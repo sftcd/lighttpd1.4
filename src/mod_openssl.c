@@ -72,8 +72,9 @@ typedef struct {
     buffer *ssl_privkey;
 #ifndef OPENSSL_NO_ESNI
     buffer *ssl_esnikeydir; /* an absolute directory name - see load_esnikeys() for more */
-    unsigned short ssl_esnimaxage; /* default to 0/infinite, others a number of seconds */
-    buffer *ssl_esnitrialdecrypt; /* "enable" to set, anything else or missing to unset */
+    unsigned short ssl_esnirefresh; /* default to 1800 second, otherwise a number of seconds */
+    buffer *ssl_esnitrialdecrypt; /* "disable" to tun off, anything else or missing to turn on */
+    time_t  ssl_esnikeyloadtime;
 #endif
     buffer *ssl_ca_file;
     buffer *ssl_ca_crl_file;
@@ -151,8 +152,9 @@ FREE_FUNC(mod_openssl_free)
             buffer_free(s->ssl_privkey);
 #ifndef OPENSSL_NO_ESNI
             buffer_free(s->ssl_esnikeydir);
-            s->ssl_esnimaxage=0;
+            s->ssl_esnirefresh=1800;
             buffer_free(s->ssl_esnitrialdecrypt);
+            s->ssl_esnikeyloadtime=0;
 #endif
             buffer_free(s->ssl_ca_file);
             buffer_free(s->ssl_ca_crl_file);
@@ -794,8 +796,7 @@ network_openssl_ssl_conf_cmd (server *srv, plugin_config *s)
 /* 
  * load any key files we find in the ssl_esnikeydir directory 
  * where there are matching <name>.pub and <name>.priv files
- * that match and that are not older than ssl_esnimaxage seconds
- * (maxage==0 means load all found)
+ * that match 
  */
 static int load_esnikeys(server *srv, plugin_config *s)
 {
@@ -807,10 +808,12 @@ static int load_esnikeys(server *srv, plugin_config *s)
      * in apps/s_server.c in my openssl fork, https://github.com/sftcd/openssl
      */
     char *esnidir=(char*)s->ssl_esnikeydir->ptr;
-    time_t maxage=(time_t)s->ssl_esnimaxage;
+#if 0
+    time_t refresh=(time_t)s->ssl_esnirefresh;
     log_error_write(srv, __FILE__, __LINE__, "sssd", 
             "load_esnikeys:  ", esnidir,
-            "maxage: ", maxage);
+            "refresh: ", refresh);
+#endif
 
     size_t elen=strlen(esnidir);
     if ((elen+7) >= PATH_MAX) {
@@ -863,6 +866,7 @@ static int load_esnikeys(server *srv, plugin_config *s)
         }
     }
     closedir(dp);
+    s->ssl_esnikeyloadtime=time(0);
 
     return 0;
 }
@@ -1087,28 +1091,34 @@ network_init_ssl (server *srv, void *p_d)
 
 #ifndef OPENSSL_NO_ESNI
         if (!buffer_string_is_empty(s->ssl_esnikeydir)) {
+#if 0
             log_error_write(srv, __FILE__, __LINE__, "sbsd", 
                     "SSL: loading esnikeydir ", s->ssl_esnikeydir, 
                     "for config item", i);
-            int rv= load_esnikeys(srv,s);
+#endif
+            int rv=load_esnikeys(srv,s);
             if (rv) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: load_esnikeys failed returning ", rv);
                 return -1;
             }
         } else {
+#if 0
             log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: Not loading esnikeydir for config item", i);
+#endif
         }
 
-        /* if value is exactly "enable" then turn on trial decryption */
-        if (buffer_is_equal_string(s->ssl_esnitrialdecrypt,"enable",strlen("enable"))) {
+        /* if value is not exactly "disable" then turn on trial decryption */
+        if (buffer_is_equal_string(s->ssl_esnitrialdecrypt,"disable",strlen("disable"))) {
+            log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: Turning off trial decryption for config item", i);
+        } else {
+#if 0
             log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: Doing trial decryption for config item", i);
+#endif
             SSL_CTX_set_options(s->ssl_ctx,SSL_OP_ESNI_TRIALDECRYPT);
-        } else {
-            log_error_write(srv, __FILE__, __LINE__, "sd", 
-                    "SSL: Not doing trial decryption config item", i);
         }
 #endif
 
@@ -1356,7 +1366,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         { "ssl.privkey",                       NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 22 */
 #ifndef OPENSSL_NO_ESNI
         { "ssl.esnikeydir",                    NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 23 */
-        { "ssl.esnimaxage",                    NULL, T_CONFIG_SHORT,  T_CONFIG_SCOPE_CONNECTION }, /* 24 */
+        { "ssl.esnirefresh",                   NULL, T_CONFIG_SHORT,  T_CONFIG_SCOPE_CONNECTION }, /* 24 */
         { "ssl.esnitrialdecrypt",              NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 25 */
 #endif
         { NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
@@ -1375,7 +1385,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         s->ssl_privkey   = buffer_init();
 #ifndef OPENSSL_NO_ESNI
         s->ssl_esnikeydir   = buffer_init();
-        s->ssl_esnimaxage  = 0;
+        s->ssl_esnirefresh  = 1800;
         s->ssl_esnitrialdecrypt  = buffer_init();
 #endif
         s->ssl_ca_file   = buffer_init();
@@ -1441,7 +1451,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         cv[22].destination = s->ssl_privkey;
 #ifndef OPENSSL_NO_ESNI
         cv[23].destination = s->ssl_esnikeydir;
-        cv[24].destination = &(s->ssl_esnimaxage);
+        cv[24].destination = &(s->ssl_esnirefresh);
         cv[25].destination = s->ssl_esnitrialdecrypt;
 #endif
 
@@ -1544,8 +1554,8 @@ mod_openssl_patch_connection (server *srv, connection *con, handler_ctx *hctx)
             /* TODO: check this out - I have no clue what this code is or if it's needed */
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnikeydir"))) {
                 PATCH(ssl_esnikeydir);
-            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnimaxage"))) {
-                PATCH(ssl_esnimaxage);
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnirefresh"))) {
+                PATCH(ssl_esnirefresh);
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnitrialdecrypt"))) {
                 PATCH(ssl_esnitrialdecrypt);
 #endif
@@ -1968,6 +1978,48 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
     hctx->srv = srv;
     con->plugin_ctx[p->id] = hctx;
     mod_openssl_patch_connection(srv, con, hctx);
+
+#ifndef OPENSSL_NO_ESNI
+    /*
+     * If we're ESNI enabled, check if we ought try re-load 
+     * ESNI keys first
+     */
+#if 0
+    log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
+                "ESNI-enabled key reload checking...");
+#endif
+    if (p->config_storage[srv_sock->sidx]->ssl_esnikeydir) {
+        time_t now=time(0);
+        plugin_config *s=p->config_storage[srv_sock->sidx];
+        time_t refresh=s->ssl_esnirefresh;
+        time_t lastload=s->ssl_esnikeyloadtime;
+        if (now > (lastload+refresh) ) {
+#if 0
+            log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
+                        "ESNI-enabled keys need reloading");
+#endif
+            int rv=SSL_esni_server_flush_keys(s->ssl_ctx);
+            if (rv!=1) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: SSL_esni_server_flush_keys failed returning ", rv);
+                return HANDLER_ERROR;
+            }
+            rv=load_esnikeys(srv,s);
+            if (rv) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: load_esnikeys failed returning ", rv);
+                return HANDLER_ERROR;
+            }
+        } else {
+#if 0
+            log_error_write(srv, __FILE__, __LINE__, "ssddd", "SSL:",
+                        "Not reloading ESNI-enabled keys", now, refresh, lastload);
+#else
+            ;
+#endif
+        }
+    }
+#endif
 
     /* connect fd to SSL */
     hctx->ssl = SSL_new(p->config_storage[srv_sock->sidx]->ssl_ctx);
