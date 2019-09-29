@@ -430,6 +430,20 @@ mod_openssl_SNI (SSL *ssl, server *srv, handler_ctx *hctx, const char *servernam
     return SSL_TLSEXT_ERR_OK;
 }
 
+#ifndef OPENSSL_NO_ESNI
+/*
+ * This prepocessor directive is used to choose between either diving
+ * into the client hello extension octets for SNI or else using an
+ * openssl API (that in my fork correctly maps ESNI into the actual
+ * servername to use). Doing the former results in picking the cover
+ * name or default key pair and not the one from ESNI, which is not
+ * a good plan:-)
+ * Just forcing the use of the OpenSSL API seems to do the trick
+ * though, which is nice.
+ */ 
+#undef SSL_CLIENT_HELLO_SUCCESS
+#endif
+
 #ifdef SSL_CLIENT_HELLO_SUCCESS
 static int
 mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
