@@ -464,11 +464,16 @@ static void esni_status2env(server *srv, connection *con, SSL *s)
             (cover==NULL?"NULL":cover), 
             (hidden==NULL?"NULL":hidden));
     http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_STATUS"), esnistatbuf, strlen(esnistatbuf));
+    char *empty="EMPTY";
     if (cover!=NULL) {
         http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_COVER"), cover, strlen(cover));
+    } else {
+        http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_COVER"), empty, strlen(empty));
     }
     if (hidden!=NULL) {
         http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_HIDDEN"), hidden, strlen(hidden));
+    } else {
+        http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_HIDDEN"), empty, strlen(empty));
     }
     return;
 }
