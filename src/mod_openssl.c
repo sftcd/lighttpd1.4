@@ -482,6 +482,7 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
     return (NULL != servername)
       ? mod_openssl_SNI(ssl, srv, hctx, servername, strlen(servername))
       : SSL_TLSEXT_ERR_NOACK; /* client did not provide SNI */
+
 }
 #endif
 #endif
@@ -2352,6 +2353,40 @@ http_cgi_ssl_env (server *srv, connection *con, handler_ctx *hctx)
                             CONST_STR_LEN("SSL_CIPHER_ALGKEYSIZE"),
                             buf, strlen(buf));
     }
+
+#if 0
+#ifndef OPENSSL_NO_ESNI
+    /*
+     * Check the ESNI status and if we get something interesting
+     * then set that in an HTTP environment variable.
+     */
+    char *hidden=NULL; 
+    char *cover=NULL;
+#define ESNISTATSTRING_LEN 64
+    char esnistatbuf[ESNISTATSTRING_LEN];
+    int esnirv=SSL_get_esni_status(hctx->ssl,&hidden,&cover);
+    switch (esnirv) {
+    case SSL_ESNI_STATUS_NOT_TRIED: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"not attempted");
+        break;
+    case SSL_ESNI_STATUS_FAILED: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"tried but failed");
+        break;
+    case SSL_ESNI_STATUS_BAD_NAME: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"worked but bad name");
+        break;
+    case SSL_ESNI_STATUS_SUCCESS:
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"success");
+        break;
+    default:
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"error getting ESNI status");
+        break;
+    }
+    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_STATUS"), esnistatbuf, strlen(esnistatbuf));
+    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_COVER"), cover, strlen(cover));
+    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_HIDDEN"), hidden, strlen(hidden));
+#endif
+#endif
 }
 
 
