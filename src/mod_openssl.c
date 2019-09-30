@@ -432,6 +432,50 @@ mod_openssl_SNI (SSL *ssl, server *srv, handler_ctx *hctx, const char *servernam
 
 #ifndef OPENSSL_NO_ESNI
 /*
+ * Check the ESNI status and if we get something interesting
+ * then set that in an HTTP environment variable.
+ */
+static void esni_status2env(server *srv, connection *con, SSL *s)
+{
+    char *hidden=NULL; 
+    char *cover=NULL;
+#define ESNISTATSTRING_LEN 64
+    char esnistatbuf[ESNISTATSTRING_LEN];
+    int esnirv=SSL_get_esni_status(s,&hidden,&cover);
+    switch (esnirv) {
+    case SSL_ESNI_STATUS_NOT_TRIED: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"not attempted");
+        break;
+    case SSL_ESNI_STATUS_FAILED: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"tried but failed");
+        break;
+    case SSL_ESNI_STATUS_BAD_NAME: 
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"worked but bad name");
+        break;
+    case SSL_ESNI_STATUS_SUCCESS:
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"success");
+        break;
+    default:
+        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"error getting ESNI status");
+        break;
+    }
+    log_error_write(srv, __FILE__, __LINE__, "ssss", "esni_status: ", 
+            esnistatbuf, 
+            (cover==NULL?"NULL":cover), 
+            (hidden==NULL?"NULL":hidden));
+    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_STATUS"), esnistatbuf, strlen(esnistatbuf));
+    if (cover!=NULL) {
+        http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_COVER"), cover, strlen(cover));
+    }
+    if (hidden!=NULL) {
+        http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_HIDDEN"), hidden, strlen(hidden));
+    }
+    return;
+}
+#endif
+
+#ifndef OPENSSL_NO_ESNI
+/*
  * This prepocessor directive is used to choose between either diving
  * into the client hello extension octets for SNI or else using an
  * openssl API (that in my fork correctly maps ESNI into the actual
@@ -1999,20 +2043,12 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
      * If we're ESNI enabled, check if we ought try re-load 
      * ESNI keys first
      */
-#if 0
-    log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
-                "ESNI-enabled key reload checking...");
-#endif
     if (p->config_storage[srv_sock->sidx]->ssl_esnikeydir) {
         time_t now=time(0);
         plugin_config *s=p->config_storage[srv_sock->sidx];
         time_t refresh=s->ssl_esnirefresh;
         time_t lastload=s->ssl_esnikeyloadtime;
         if (now > (lastload+refresh) ) {
-#if 0
-            log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
-                        "ESNI-enabled keys need reloading");
-#endif
             int rv=SSL_esni_server_flush_keys(s->ssl_ctx);
             if (rv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
@@ -2025,14 +2061,7 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
                     "SSL: load_esnikeys failed returning ", rv);
                 return HANDLER_ERROR;
             }
-        } else {
-#if 0
-            log_error_write(srv, __FILE__, __LINE__, "ssddd", "SSL:",
-                        "Not reloading ESNI-enabled keys", now, refresh, lastload);
-#else
-            ;
-#endif
-        }
+        } 
     }
 #endif
 
@@ -2323,7 +2352,6 @@ https_add_ssl_client_entries (server *srv, connection *con, handler_ctx *hctx)
     X509_free(xs);
 }
 
-
 static void
 http_cgi_ssl_env (server *srv, connection *con, handler_ctx *hctx)
 {
@@ -2354,39 +2382,6 @@ http_cgi_ssl_env (server *srv, connection *con, handler_ctx *hctx)
                             buf, strlen(buf));
     }
 
-#if 0
-#ifndef OPENSSL_NO_ESNI
-    /*
-     * Check the ESNI status and if we get something interesting
-     * then set that in an HTTP environment variable.
-     */
-    char *hidden=NULL; 
-    char *cover=NULL;
-#define ESNISTATSTRING_LEN 64
-    char esnistatbuf[ESNISTATSTRING_LEN];
-    int esnirv=SSL_get_esni_status(hctx->ssl,&hidden,&cover);
-    switch (esnirv) {
-    case SSL_ESNI_STATUS_NOT_TRIED: 
-        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"not attempted");
-        break;
-    case SSL_ESNI_STATUS_FAILED: 
-        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"tried but failed");
-        break;
-    case SSL_ESNI_STATUS_BAD_NAME: 
-        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"worked but bad name");
-        break;
-    case SSL_ESNI_STATUS_SUCCESS:
-        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"success");
-        break;
-    default:
-        snprintf(esnistatbuf,ESNISTATSTRING_LEN,"error getting ESNI status");
-        break;
-    }
-    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_STATUS"), esnistatbuf, strlen(esnistatbuf));
-    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_COVER"), cover, strlen(cover));
-    http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_HIDDEN"), hidden, strlen(hidden));
-#endif
-#endif
 }
 
 
@@ -2424,6 +2419,13 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
     if (hctx->conf.ssl_verifyclient) {
         mod_openssl_handle_request_env(srv, con, p);
     }
+
+#ifndef OPENSSL_NO_ESNI
+    /*
+     * Check the ESNI status and set that in environment
+     */
+    esni_status2env(srv,con,hctx->ssl);
+#endif
 
     return HANDLER_GO_ON;
 }
