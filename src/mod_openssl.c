@@ -450,10 +450,12 @@ static int esni_check_if_only(server *srv, SSL *ssl)
     UNUSED(esnirv);
 
     /*
+     * If ESNI worked and there's no cover, we're done.
      * If ESNI worked and we had a cover, we'll check on that.
      * If ESNI failed or wasn't tried but there's a cleartext SNI
      * then we'll check on that.
      */
+    if (esnirv==SSL_ESNI_STATUS_SUCCESS && !cover) { return 0; }
     if (!cover) {
         cover = (char*)SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
     }
