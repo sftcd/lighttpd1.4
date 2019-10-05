@@ -73,8 +73,9 @@ typedef struct {
 #ifndef OPENSSL_NO_ESNI
     buffer *ssl_esnikeydir; /* an absolute directory name - see load_esnikeys() for more */
     unsigned short ssl_esnirefresh; /* default to 1800 second, otherwise a number of seconds */
+    time_t  ssl_esnikeyloadtime; /* stored time_t of last time key files loaded from dir */
     buffer *ssl_esnitrialdecrypt; /* "disable" to tun off, anything else or missing to turn on */
-    time_t  ssl_esnikeyloadtime;
+    buffer *ssl_esnionly; /* "enable" if you want this virtualhost to only be accessible if ESNI worked */
 #endif
     buffer *ssl_ca_file;
     buffer *ssl_ca_crl_file;
@@ -153,8 +154,9 @@ FREE_FUNC(mod_openssl_free)
 #ifndef OPENSSL_NO_ESNI
             buffer_free(s->ssl_esnikeydir);
             s->ssl_esnirefresh=1800;
-            buffer_free(s->ssl_esnitrialdecrypt);
             s->ssl_esnikeyloadtime=0;
+            buffer_free(s->ssl_esnitrialdecrypt);
+            buffer_free(s->ssl_esnionly);
 #endif
             buffer_free(s->ssl_ca_file);
             buffer_free(s->ssl_ca_crl_file);
@@ -432,6 +434,63 @@ mod_openssl_SNI (SSL *ssl, server *srv, handler_ctx *hctx, const char *servernam
 
 #ifndef OPENSSL_NO_ESNI
 /*
+ * If esnionly was set for this case, and cleartext SNI has
+ * that value, then return true. (This is called twice
+ * below, once when setting the server cert and once when
+ * setting the uri.authority etc)
+ */
+static int esni_check_if_only(server *srv, SSL *ssl)
+{
+    char *hidden=NULL;
+    char *cover=NULL;
+    int esnirv=SSL_get_esni_status(ssl,&hidden,&cover);
+    /*
+     * We don't really care if that failed in this case
+     */
+    UNUSED(esnirv);
+
+    /*
+     * If ESNI worked and we had a cover, we'll check on that.
+     * If ESNI failed or wasn't tried but there's a cleartext SNI
+     * then we'll check on that.
+     */
+    if (!cover) {
+        cover = (char*)SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+    }
+
+    /*
+     * if still nothing then we're done - there's nothing to check
+     */
+    if (!cover) return 0;
+
+    /*
+     * Search through the server config to see if there's one
+     * for "cover" that's marked as esnionly - if we find one
+     * then say so
+     */
+    int esnionly_set=0;
+    for (size_t i = 0; !esnionly_set && i < srv->config_context->used; ++i) {
+		data_config * const config = (data_config *)srv->config_context->data[i];
+        for (size_t cid = 0; !esnionly_set && cid < config->children.used; ++cid) {
+            buffer *vhost=config->children.data[cid]->string;
+			if (buffer_is_equal_string(vhost, cover, strlen(cover))) {
+                for (size_t vid=0;!esnionly_set && vid!=config->children.data[cid]->value->used;vid++) {
+                    buffer *keyv=config->children.data[cid]->value->data[vid]->key;
+			        if (buffer_is_equal_string(keyv, "ssl.esnionly", strlen("ssl.esnionly"))) {
+                        esnionly_set=1;
+                    }
+                }
+            }
+        }
+    }
+
+    return esnionly_set;
+}
+#endif
+
+#ifndef OPENSSL_NO_ESNI
+#define ESNISTATSTRING_LEN 64
+/*
  * Check the ESNI status and if we get something interesting
  * then set that in an HTTP environment variable.
  */
@@ -439,7 +498,6 @@ static void esni_status2env(server *srv, connection *con, SSL *s)
 {
     char *hidden=NULL; 
     char *cover=NULL;
-#define ESNISTATSTRING_LEN 64
     char esnistatbuf[ESNISTATSTRING_LEN];
     int esnirv=SSL_get_esni_status(s,&hidden,&cover);
     switch (esnirv) {
@@ -459,10 +517,10 @@ static void esni_status2env(server *srv, connection *con, SSL *s)
         snprintf(esnistatbuf,ESNISTATSTRING_LEN,"error getting ESNI status");
         break;
     }
-    log_error_write(srv, __FILE__, __LINE__, "ssss", "esni_status: ", 
-            esnistatbuf, 
-            (cover==NULL?"NULL":cover), 
-            (hidden==NULL?"NULL":hidden));
+    log_error_write(srv, __FILE__, __LINE__, "ssssss", "esni_status: ",
+            esnistatbuf,
+            "cover:",(cover==NULL?"NULL":cover),
+            "hidden:",(hidden==NULL?"NULL":hidden));
     http_header_env_set(con, CONST_STR_LEN("SSL_ESNI_STATUS"), esnistatbuf, strlen(esnistatbuf));
     char *empty="EMPTY";
     if (cover!=NULL) {
@@ -528,6 +586,44 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
     UNUSED(al);
 
     const char *servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+
+#ifndef OPENSSL_NO_ESNI
+    /*
+     * Check the ESNI status and set that in environment
+     */
+    esni_status2env(srv,hctx->con,ssl);
+
+
+    /*
+     * If ssl.esnionly was set for the cleartext SNI value then
+     * fall back to the default 443 situation
+     */
+    int ifo=esni_check_if_only(srv,ssl);
+    if (ifo==1) {
+        /*
+         * Fall back to default 443 listener name and docroot, or configured equivalents
+         */
+        const char *newservername = NULL;
+        buffer *sn=srv->config_storage[0]->server_name;
+        if (sn==NULL || buffer_string_is_empty(sn) ) {
+                log_error_write(srv, __FILE__, __LINE__, "ssss",
+                    "no base servername buffer - but esnionly set - fatal",
+                    "You need to set server.name in the default section ",
+                    "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
+                    "specific virtual host");
+            return SSL_TLSEXT_ERR_ALERT_FATAL;
+        }
+        newservername = sn->ptr;
+        log_error_write(srv, __FILE__, __LINE__, "ssss", "esnionly name change from:",
+            servername,"to:", newservername);
+        /*
+         * Note that server name will need to be fixed up to newservername in URI later
+         * (we don't yet have a URL as we're still in the TLS handshake)
+         */
+        return mod_openssl_SNI(ssl, srv, hctx, newservername, strlen(newservername));
+    }
+
+#endif
     return (NULL != servername)
       ? mod_openssl_SNI(ssl, srv, hctx, servername, strlen(servername))
       : SSL_TLSEXT_ERR_NOACK; /* client did not provide SNI */
@@ -1154,23 +1250,14 @@ network_init_ssl (server *srv, void *p_d)
         }
 
 #ifndef OPENSSL_NO_ESNI
+
         if (!buffer_string_is_empty(s->ssl_esnikeydir)) {
-#if 0
-            log_error_write(srv, __FILE__, __LINE__, "sbsd", 
-                    "SSL: loading esnikeydir ", s->ssl_esnikeydir, 
-                    "for config item", i);
-#endif
             int rv=load_esnikeys(srv,s);
             if (rv) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: load_esnikeys failed returning ", rv);
                 return -1;
             }
-        } else {
-#if 0
-            log_error_write(srv, __FILE__, __LINE__, "sd", 
-                    "SSL: Not loading esnikeydir for config item", i);
-#endif
         }
 
         /* if value is not exactly "disable" then turn on trial decryption */
@@ -1178,12 +1265,9 @@ network_init_ssl (server *srv, void *p_d)
             log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: Turning off trial decryption for config item", i);
         } else {
-#if 0
-            log_error_write(srv, __FILE__, __LINE__, "sd", 
-                    "SSL: Doing trial decryption for config item", i);
-#endif
             SSL_CTX_set_options(s->ssl_ctx,SSL_OP_ESNI_TRIALDECRYPT);
         }
+
 #endif
 
       #ifndef OPENSSL_NO_DH
@@ -1432,6 +1516,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         { "ssl.esnikeydir",                    NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 23 */
         { "ssl.esnirefresh",                   NULL, T_CONFIG_SHORT,  T_CONFIG_SCOPE_CONNECTION }, /* 24 */
         { "ssl.esnitrialdecrypt",              NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 25 */
+        { "ssl.esnionly",                      NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_CONNECTION }, /* 26 */
 #endif
         { NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
     };
@@ -1451,6 +1536,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         s->ssl_esnikeydir   = buffer_init();
         s->ssl_esnirefresh  = 1800;
         s->ssl_esnitrialdecrypt  = buffer_init();
+        s->ssl_esnionly  = buffer_init();
 #endif
         s->ssl_ca_file   = buffer_init();
         s->ssl_ca_crl_file = buffer_init();
@@ -1517,6 +1603,7 @@ SETDEFAULTS_FUNC(mod_openssl_set_defaults)
         cv[23].destination = s->ssl_esnikeydir;
         cv[24].destination = &(s->ssl_esnirefresh);
         cv[25].destination = s->ssl_esnitrialdecrypt;
+        cv[26].destination = s->ssl_esnionly;
 #endif
 
         p->config_storage[i] = s;
@@ -1615,13 +1702,17 @@ mod_openssl_patch_connection (server *srv, connection *con, handler_ctx *hctx)
                 PATCH(ssl_pemfile_x509);
                 PATCH(ssl_pemfile_pkey);
 #ifndef OPENSSL_NO_ESNI
-            /* TODO: check this out - I have no clue what this code is or if it's needed */
+#if 0
+            /* don't want to inherit these I guess, but it's a guess */
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnikeydir"))) {
                 PATCH(ssl_esnikeydir);
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnirefresh"))) {
                 PATCH(ssl_esnirefresh);
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnitrialdecrypt"))) {
                 PATCH(ssl_esnitrialdecrypt);
+            } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.esnionly"))) {
+                PATCH(ssl_esnionly);
+#endif
 #endif
             } else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.ca-file"))) {
                 PATCH(ssl_ca_file);
@@ -2427,9 +2518,46 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
 
 #ifndef OPENSSL_NO_ESNI
     /*
-     * Check the ESNI status and set that in environment
+     * If ssl.esnionly was set for the cleartext SNI value then
+     * fall back to the default port 443 situation for server
+     * name and document root - that is a bit limited but extending 
+     * it to specially configured fallbacks (of domain name and 
+     * document root) turned out complex and likely isn't worth
+     * it - lighttd's behaviour before this was added was to 
+     * fall back to the default for an unknown SNI to doing the
+     * same reasonable
      */
-    esni_status2env(srv,con,hctx->ssl);
+    int ifo=esni_check_if_only(srv,hctx->ssl);
+    if (ifo==1) {
+        /*
+         * Fall back to default 443 listener name and docroot, or configured equivalents
+         */
+        buffer *sn=srv->config_storage[0]->server_name;
+        if (sn==NULL || buffer_string_is_empty(sn) ) {
+            log_error_write(srv, __FILE__, __LINE__, "ssss",
+                    "no base servername buffer - but esnionly set - fatal",
+                    "You need to set server.name in the default section ",
+                    "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
+                    "specific virtual host");
+            return SSL_TLSEXT_ERR_ALERT_FATAL;
+        }
+        buffer *dr=srv->config_storage[0]->document_root;
+        if (dr==NULL || buffer_string_is_empty(dr) ) {
+            log_error_write(srv, __FILE__, __LINE__, "ssss", 
+                    "no base docroot buffer - but esnionly set - fatal",
+                    "You need to set server.document_root in the default section ",
+                    "or ssl.ssl_esnionlyswapdocroot to use ssl.esnionly for a ",
+                    "specific virtual host"); 
+            return SSL_TLSEXT_ERR_ALERT_FATAL;
+        }
+        log_error_write(srv, __FILE__, __LINE__, "sbb",
+            "esnionly2 name change to:",
+            sn, dr);
+        buffer_copy_buffer(con->request.http_host,sn);
+        buffer_copy_buffer(con->conf.document_root,dr);
+        buffer_copy_buffer(con->uri.authority, sn);
+    }
+
 #endif
 
     return HANDLER_GO_ON;
