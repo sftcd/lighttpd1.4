@@ -615,17 +615,21 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
             "esni_check_if_only error: can't properly handle esnionly");
         return SSL_TLSEXT_ERR_ALERT_FATAL;
     } else if (ifo==1) {
+
+#if 0
         /*
          * Fall back to default 443 listener name and docroot, or configured equivalents
+         * I tried this but it didn't work. The docroot, when set later on, is too sticky
+         * and affects all later queries to that esniony virtual host.
+         * So, for now, we'll barf entirely if esnionly is configured but the name is
+         * in the cleartext SNI, whether or not there's an accompanying ESNI.
          */
         const char *newservername = NULL;
         buffer *sn=srv->config_storage[0]->server_name;
         if (sn==NULL || buffer_string_is_empty(sn) ) {
-            log_error_write(srv, __FILE__, __LINE__, "ssss",
+            log_error_write(srv, __FILE__, __LINE__, "ss",
                     "no base servername buffer - but esnionly set - fatal",
-                    "You need to set server.name in the default section ",
-                    "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
-                    "specific virtual host");
+                    "You need to set server.name in the default section ");
             return SSL_TLSEXT_ERR_ALERT_FATAL;
         }
         newservername = sn->ptr;
@@ -636,6 +640,10 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
          * (we don't yet have a URL as we're still in the TLS handshake)
          */
         return mod_openssl_SNI(ssl, srv, hctx, newservername, strlen(newservername));
+#endif
+        log_error_write(srv, __FILE__, __LINE__, "ss",
+            "esnionly abuse for", servername);
+        return SSL_TLSEXT_ERR_ALERT_FATAL; /* barf!! */
     }
 
 #endif
@@ -2548,33 +2556,39 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
             "esni_check_if_only error: can't properly handle esnionly");
         return HANDLER_ERROR;
     } else if (ifo==1) {
+#if 0
         /*
          * Fall back to default 443 listener name and docroot, or configured equivalents
+         * I tried this but it didn't work. The docroot, when set later on, is too sticky
+         * and affects all later queries to that esniony virtual host.
+         * So, for now, we'll barf entirely if esnionly is configured but the name is
+         * in the cleartext SNI, whether or not there's an accompanying ESNI.
          */
         buffer *sn=srv->config_storage[0]->server_name;
         if (sn==NULL || buffer_string_is_empty(sn) ) {
-            log_error_write(srv, __FILE__, __LINE__, "ssss",
+            log_error_write(srv, __FILE__, __LINE__, "ss",
                     "no base servername buffer - but esnionly set - fatal",
-                    "You need to set server.name in the default section ",
-                    "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
-                    "specific virtual host");
+                    "You need to set server.name in the default section ");
             return HANDLER_ERROR;
         }
         buffer *dr=srv->config_storage[0]->document_root;
         if (dr==NULL || buffer_string_is_empty(dr) ) {
-            log_error_write(srv, __FILE__, __LINE__, "ssss", 
+            log_error_write(srv, __FILE__, __LINE__, "ss", 
                     "no base docroot buffer - but esnionly set - fatal",
-                    "You need to set server.document_root in the default section ",
-                    "or ssl.ssl_esnionlyswapdocroot to use ssl.esnionly for a ",
-                    "specific virtual host"); 
+                    "You need to set server.document_root in the default section ");
             return HANDLER_ERROR;
         }
         log_error_write(srv, __FILE__, __LINE__, "sbb",
-            "esnionly2 name change to:",
-            sn, dr);
+            "esnionly2 name change to:", sn, dr);
+
         buffer_copy_buffer(con->request.http_host,sn);
-        buffer_copy_buffer(con->conf.document_root,dr);
         buffer_copy_buffer(con->uri.authority, sn);
+        buffer_copy_buffer(con->conf.document_root,dr);
+#endif
+        log_error_write(srv, __FILE__, __LINE__, "sb",
+            "esnionly2 abuse for",con->uri.authority);
+        return HANDLER_ERROR;
+
     }
 
 #endif
