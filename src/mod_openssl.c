@@ -438,16 +438,16 @@ mod_openssl_SNI (SSL *ssl, server *srv, handler_ctx *hctx, const char *servernam
  * that value, then return true. (This is called twice
  * below, once when setting the server cert and once when
  * setting the uri.authority etc)
+ * return:
+ *  0 if esnionly irrelevant
+ *  1 if esnionly applies
+ *  -1 if error figuring out the above (e.g. SSL_ESNI_STATUS_FAILED)
  */
 static int esni_check_if_only(server *srv, SSL *ssl)
 {
     char *hidden=NULL;
     char *cover=NULL;
     int esnirv=SSL_get_esni_status(ssl,&hidden,&cover);
-    /*
-     * We don't really care if that failed in this case
-     */
-    UNUSED(esnirv);
 
     /*
      * If ESNI worked and there's no cover, we're done.
@@ -455,9 +455,18 @@ static int esni_check_if_only(server *srv, SSL *ssl)
      * If ESNI failed or wasn't tried but there's a cleartext SNI
      * then we'll check on that.
      */
-    if (esnirv==SSL_ESNI_STATUS_SUCCESS && !cover) { return 0; }
-    if (!cover) {
+    if (esnirv==SSL_ESNI_STATUS_SUCCESS && !cover) { 
+        return 0; 
+    }
+
+    if (esnirv==SSL_ESNI_STATUS_NOT_TRIED && !cover) {
+        /* Access cleartext SNI */
         cover = (char*)SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+    }
+
+    if (esnirv!=SSL_ESNI_STATUS_SUCCESS && esnirv!=SSL_ESNI_STATUS_NOT_TRIED) {
+        /* hmm - oddity, better to fail here */
+        return -1;
     }
 
     /*
@@ -601,14 +610,18 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
      * fall back to the default 443 situation
      */
     int ifo=esni_check_if_only(srv,ssl);
-    if (ifo==1) {
+    if (ifo==-1) {
+        log_error_write(srv, __FILE__, __LINE__, "s",
+            "esni_check_if_only error: can't properly handle esnionly");
+        return SSL_TLSEXT_ERR_ALERT_FATAL;
+    } else if (ifo==1) {
         /*
          * Fall back to default 443 listener name and docroot, or configured equivalents
          */
         const char *newservername = NULL;
         buffer *sn=srv->config_storage[0]->server_name;
         if (sn==NULL || buffer_string_is_empty(sn) ) {
-                log_error_write(srv, __FILE__, __LINE__, "ssss",
+            log_error_write(srv, __FILE__, __LINE__, "ssss",
                     "no base servername buffer - but esnionly set - fatal",
                     "You need to set server.name in the default section ",
                     "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
@@ -2530,7 +2543,11 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
      * same reasonable
      */
     int ifo=esni_check_if_only(srv,hctx->ssl);
-    if (ifo==1) {
+    if (ifo==-1) {
+        log_error_write(srv, __FILE__, __LINE__, "s",
+            "esni_check_if_only error: can't properly handle esnionly");
+        return HANDLER_ERROR;
+    } else if (ifo==1) {
         /*
          * Fall back to default 443 listener name and docroot, or configured equivalents
          */
@@ -2541,7 +2558,7 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
                     "You need to set server.name in the default section ",
                     "or ssl.esnionlyswaperroo to use ssl.esnionly for a ",
                     "specific virtual host");
-            return SSL_TLSEXT_ERR_ALERT_FATAL;
+            return HANDLER_ERROR;
         }
         buffer *dr=srv->config_storage[0]->document_root;
         if (dr==NULL || buffer_string_is_empty(dr) ) {
@@ -2550,7 +2567,7 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
                     "You need to set server.document_root in the default section ",
                     "or ssl.ssl_esnionlyswapdocroot to use ssl.esnionly for a ",
                     "specific virtual host"); 
-            return SSL_TLSEXT_ERR_ALERT_FATAL;
+            return HANDLER_ERROR;
         }
         log_error_write(srv, __FILE__, __LINE__, "sbb",
             "esnionly2 name change to:",
