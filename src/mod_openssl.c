@@ -641,8 +641,8 @@ network_ssl_servername_callback (SSL *ssl, int *al, server *srv)
          */
         return mod_openssl_SNI(ssl, srv, hctx, newservername, strlen(newservername));
 #endif
-        log_error_write(srv, __FILE__, __LINE__, "ss",
-            "esnionly abuse for", servername);
+        log_error_write(srv, __FILE__, __LINE__, "sssb",
+            "esnionly abuse for", servername,"from",hctx->con->dst_addr_buf);
         return SSL_TLSEXT_ERR_ALERT_FATAL; /* barf!! */
     }
 
@@ -2585,8 +2585,8 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
         buffer_copy_buffer(con->uri.authority, sn);
         buffer_copy_buffer(con->conf.document_root,dr);
 #endif
-        log_error_write(srv, __FILE__, __LINE__, "sb",
-            "esnionly2 abuse for",con->uri.authority);
+        log_error_write(srv, __FILE__, __LINE__, "sssd",
+            "esnionly abuse2 for", con->uri.authority,"from",con->dst_addr_buf);
         return HANDLER_ERROR;
 
     }
