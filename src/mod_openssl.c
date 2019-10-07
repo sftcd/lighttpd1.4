@@ -2585,7 +2585,7 @@ CONNECTION_FUNC(mod_openssl_handle_uri_raw)
         buffer_copy_buffer(con->uri.authority, sn);
         buffer_copy_buffer(con->conf.document_root,dr);
 #endif
-        log_error_write(srv, __FILE__, __LINE__, "sssd",
+        log_error_write(srv, __FILE__, __LINE__, "sssb",
             "esnionly abuse2 for", con->uri.authority,"from",con->dst_addr_buf);
         return HANDLER_ERROR;
 
