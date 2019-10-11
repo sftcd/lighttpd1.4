@@ -1038,7 +1038,7 @@ static int load_esnikeys(server *srv, plugin_config *s)
             pubname[elen+1+nlen-1]=0x00;
             struct stat thestat;
             if (stat(pubname,&thestat)==0 && stat(privname,&thestat)==0) {
-                if (SSL_esni_server_enable(s->ssl_ctx,privname,pubname)!=1) {
+                if (SSL_CTX_esni_server_enable(s->ssl_ctx,privname,pubname)!=1) {
                     log_error_write(srv, __FILE__, __LINE__, "ss", 
                         "load_esnikeys failed for",pubname);
                 } else {
@@ -1288,7 +1288,7 @@ network_init_ssl (server *srv, void *p_d)
                 return -1;
             }
             int numkeys=0;
-            int ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            int ksrv=SSL_CTX_esni_server_key_status(s->ssl_ctx,&numkeys);
             if (ksrv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: SSL_esni_server_key_status failed, returning ", ksrv);
@@ -2184,7 +2184,7 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
         time_t refresh=s->ssl_esnirefresh;
         time_t lastload=s->ssl_esnikeyloadtime;
         if (now > (lastload+refresh) ) {
-            int rv=SSL_esni_server_flush_keys(s->ssl_ctx,refresh);
+            int rv=SSL_CTX_esni_server_flush_keys(s->ssl_ctx,refresh);
             if (rv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: SSL_esni_server_flush_keys failed returning ", rv);
@@ -2192,7 +2192,7 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
             }
             int numkeys=0;
             int ksrv;
-            ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            ksrv=SSL_CTX_esni_server_key_status(s->ssl_ctx,&numkeys);
             if (ksrv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: post-flush SSL_esni_server_key_status failed, returning ", ksrv);
@@ -2206,7 +2206,7 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
                  * Don't fail hard if we still have some ESNI keys loaded 
                  * But do fail hard if we have no ESNI keys left
                  */
-                ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+                ksrv=SSL_CTX_esni_server_key_status(s->ssl_ctx,&numkeys);
                 if (ksrv!=1) {
                     log_error_write(srv, __FILE__, __LINE__, "sdd", 
                         "SSL: load_esnikeys and SSL_esni_server_key_status both failed, returning ", rv,ksrv);
@@ -2223,7 +2223,7 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
                         "remain");
                 }
             }
-            ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            ksrv=SSL_CTX_esni_server_key_status(s->ssl_ctx,&numkeys);
             if (ksrv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: SSL_esni_server_key_status failed, returning ", ksrv);
