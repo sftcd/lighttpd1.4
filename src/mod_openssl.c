@@ -1012,6 +1012,7 @@ static int load_esnikeys(server *srv, plugin_config *s)
             "load_esnikeys, can't read directory:  ", s->ssl_esnikeydir);
         return -1;
     }
+    int somekeyworked=0;
     while ((ep=readdir(dp))!=NULL) {
         char privname[PATH_MAX];
         char pubname[PATH_MAX];
@@ -1024,7 +1025,7 @@ static int load_esnikeys(server *srv, plugin_config *s)
             if (strncmp(last5,".priv",5)) {
                 continue;
             }
-            if ((elen+nlen)>=PATH_MAX) {
+            if ((elen+nlen+1+1)>=PATH_MAX) { /* +1 for '/' and of NULL terminator */
                 closedir(dp);
                 log_error_write(srv, __FILE__, __LINE__, "ss", 
                     "load_esnikeys, error, file name too long:  ", ep->d_name);
@@ -1038,15 +1039,20 @@ static int load_esnikeys(server *srv, plugin_config *s)
             struct stat thestat;
             if (stat(pubname,&thestat)==0 && stat(privname,&thestat)==0) {
                 if (SSL_esni_server_enable(s->ssl_ctx,privname,pubname)!=1) {
-                    log_error_write(srv, __FILE__, __LINE__, "s", 
-                        "load_esnikeys, SSL_esni_server_enable failed" );
-                    return -1;
+                    log_error_write(srv, __FILE__, __LINE__, "ss", 
+                        "load_esnikeys failed for",pubname);
                 } else {
                     log_error_write(srv, __FILE__, __LINE__, "ss", 
-                        "load_esnikeys worked for ", pubname );
+                        "load_esnikeys worked for", pubname );
+                    somekeyworked=1;
                 }
             }
         }
+    }
+    if (somekeyworked==0) {
+        log_error_write(srv, __FILE__, __LINE__, "s", 
+            "load_esnikeys failed for all keys but ESNI configured - exiting");
+        return -1;
     }
     closedir(dp);
     s->ssl_esnikeyloadtime=time(0);
@@ -1281,6 +1287,16 @@ network_init_ssl (server *srv, void *p_d)
                     "SSL: load_esnikeys failed returning ", rv);
                 return -1;
             }
+            int numkeys=0;
+            int ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            if (ksrv!=1) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: SSL_esni_server_key_status failed, returning ", ksrv);
+            } else {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: SSL_esni_server_key_status number of keys loaded", numkeys);
+            }
+                
         }
 
         /* if value is not exactly "disable" then turn on trial decryption */
@@ -2168,18 +2184,54 @@ CONNECTION_FUNC(mod_openssl_handle_con_accept)
         time_t refresh=s->ssl_esnirefresh;
         time_t lastload=s->ssl_esnikeyloadtime;
         if (now > (lastload+refresh) ) {
-            int rv=SSL_esni_server_flush_keys(s->ssl_ctx);
+            int rv=SSL_esni_server_flush_keys(s->ssl_ctx,refresh);
             if (rv!=1) {
                 log_error_write(srv, __FILE__, __LINE__, "sd", 
                     "SSL: SSL_esni_server_flush_keys failed returning ", rv);
                 return HANDLER_ERROR;
             }
+            int numkeys=0;
+            int ksrv;
+            ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            if (ksrv!=1) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: post-flush SSL_esni_server_key_status failed, returning ", ksrv);
+            } else {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: post-flush SSL_esni_server_key_status number of keys loaded", numkeys);
+            }
             rv=load_esnikeys(srv,s);
             if (rv) {
-                log_error_write(srv, __FILE__, __LINE__, "sd", 
-                    "SSL: load_esnikeys failed returning ", rv);
-                return HANDLER_ERROR;
+                /*
+                 * Don't fail hard if we still have some ESNI keys loaded 
+                 * But do fail hard if we have no ESNI keys left
+                 */
+                ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+                if (ksrv!=1) {
+                    log_error_write(srv, __FILE__, __LINE__, "sdd", 
+                        "SSL: load_esnikeys and SSL_esni_server_key_status both failed, returning ", rv,ksrv);
+                    return HANDLER_ERROR;
+                }
+                if (numkeys<=0) {
+                    log_error_write(srv, __FILE__, __LINE__, "sdd", 
+                        "SSL: SSL_esni_server_key_status said no keys loaded after load_esnikeys failed returning ", rv);
+                    return HANDLER_ERROR;
+                } else {
+                    log_error_write(srv, __FILE__, __LINE__, "sdsds", 
+                        "SSL: load_esnikeys failed returning", rv,
+                        "but SSL_esni_server_key_status said", numkeys,
+                        "remain");
+                }
             }
+            ksrv=SSL_esni_server_key_status(s->ssl_ctx,&numkeys);
+            if (ksrv!=1) {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: SSL_esni_server_key_status failed, returning ", ksrv);
+            } else {
+                log_error_write(srv, __FILE__, __LINE__, "sd", 
+                    "SSL: SSL_esni_server_key_status number of keys loaded", numkeys);
+            }
+                
         } 
     }
 #endif
