@@ -991,13 +991,6 @@ static int load_esnikeys(server *srv, plugin_config *s)
      * in apps/s_server.c in my openssl fork, https://github.com/sftcd/openssl
      */
     char *esnidir=(char*)s->ssl_esnikeydir->ptr;
-#if 0
-    time_t refresh=(time_t)s->ssl_esnirefresh;
-    log_error_write(srv, __FILE__, __LINE__, "sssd", 
-            "load_esnikeys:  ", esnidir,
-            "refresh: ", refresh);
-#endif
-
     size_t elen=strlen(esnidir);
     if ((elen+7) >= PATH_MAX) {
         log_error_write(srv, __FILE__, __LINE__, "sb", 
@@ -1056,7 +1049,6 @@ static int load_esnikeys(server *srv, plugin_config *s)
     }
     closedir(dp);
     s->ssl_esnikeyloadtime=time(0);
-
     return 0;
 }
 #endif
@@ -1420,6 +1412,15 @@ network_init_ssl (server *srv, void *p_d)
             plugin_config *s1 = p->config_storage[j];
 
             if (!buffer_string_is_empty(s1->ssl_ca_dn_file)) {
+#ifndef OPENSSL_NO_ESNI
+                if (1 != SSL_CTX_load_verify_file(
+                           s->ssl_ctx, s1->ssl_ca_dn_file->ptr)) {
+                    log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
+                                    ERR_error_string(ERR_get_error(), NULL),
+                                    s1->ssl_ca_dn_file);
+                    return -1;
+                }
+#else
                 if (1 != SSL_CTX_load_verify_locations(
                            s->ssl_ctx, s1->ssl_ca_dn_file->ptr, NULL)) {
                     log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
@@ -1427,8 +1428,18 @@ network_init_ssl (server *srv, void *p_d)
                                     s1->ssl_ca_dn_file);
                     return -1;
                 }
+#endif
             }
             if (!buffer_string_is_empty(s1->ssl_ca_file)) {
+#ifndef OPENSSL_NO_ESNI
+                if (1 != SSL_CTX_load_verify_file(
+                           s->ssl_ctx, s1->ssl_ca_file->ptr)) {
+                    log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
+                                    ERR_error_string(ERR_get_error(), NULL),
+                                    s1->ssl_ca_file);
+                    return -1;
+                }
+#else
                 if (1 != SSL_CTX_load_verify_locations(
                            s->ssl_ctx, s1->ssl_ca_file->ptr, NULL)) {
                     log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
@@ -1436,6 +1447,7 @@ network_init_ssl (server *srv, void *p_d)
                                     s1->ssl_ca_file);
                     return -1;
                 }
+#endif
             }
         }
 
@@ -1457,11 +1469,19 @@ network_init_ssl (server *srv, void *p_d)
             SSL_CTX_set_verify_depth(s->ssl_ctx, s->ssl_verifyclient_depth + 1);
             if (!buffer_string_is_empty(s->ssl_ca_crl_file)) {
                 X509_STORE *store = SSL_CTX_get_cert_store(s->ssl_ctx);
+#ifndef OPENSSL_NO_ESNI
+                if (1 != X509_STORE_load_file(store, s->ssl_ca_crl_file->ptr)) {
+                    log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
+                    ERR_error_string(ERR_get_error(), NULL), s->ssl_ca_crl_file);
+                    return -1;
+                }
+#else
                 if (1 != X509_STORE_load_locations(store, s->ssl_ca_crl_file->ptr, NULL)) {
                     log_error_write(srv, __FILE__, __LINE__, "ssb", "SSL:",
                     ERR_error_string(ERR_get_error(), NULL), s->ssl_ca_crl_file);
                     return -1;
                 }
+#endif
                 X509_STORE_set_flags(store, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
             }
         }
