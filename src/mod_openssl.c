@@ -86,6 +86,15 @@
 #endif
 #endif
 
+/* check defines from <openssl/ssl.h> for experimental ECH support */
+#if !defined(SSL_OP_ECH_GREASE)
+#define OPENSSL_NO_ECH
+#endif
+
+#ifndef OPENSSL_NO_ECH
+#include <openssl/ech.h>
+#endif
+
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
 #include <openssl/store.h>
@@ -117,6 +126,9 @@ typedef struct {
 
 typedef struct {
     SSL_CTX *ssl_ctx;
+    buffer *ech_keydir;
+    int32_t ech_keydir_refresh_interval;
+    time_t ech_keydir_refresh_ts;
 } plugin_ssl_ctx;
 
 typedef struct {
@@ -132,6 +144,7 @@ typedef struct {
     unsigned char ssl_honor_cipher_order; /* determine SSL cipher in server-preferred order, not client-order */
     const buffer *ssl_cipher_list;
     array *ssl_conf_cmd;
+    array *ech_opts;
 
     /*(copied from plugin_data for socket ssl_ctx config)*/
     const plugin_cert *pc;
@@ -503,6 +516,149 @@ ssl_tlsext_status_cb(SSL *ssl, void *arg)
 }
 #endif
 #endif
+
+
+#ifndef OPENSSL_NO_ECH
+
+#ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+static void ech_key_status_trace (server * const srv, SSL_CTX * const ssl_ctx)
+{
+    int numkeys = 0;
+    int ksrv = SSL_CTX_ech_server_key_status(ssl_ctx, &numkeys);
+    if (ksrv != 1)
+        log_error(srv->errh, __FILE__, __LINE__,
+          "SSL: SSL_CTX_ech_server_key_status failed (%d)", ksrv);
+    else
+        log_error(srv->errh, __FILE__, __LINE__,
+          "SSL: SSL_CTX_ech_server_key_status number of keys loaded %d",
+          numkeys);
+}
+#endif
+
+#include <dirent.h>
+static int
+mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, const time_t cur_ts)
+{
+    if (NULL == s->ech_keydir
+        || s->ech_keydir_refresh_ts + s->ech_keydir_refresh_interval > cur_ts)
+        return 1;
+
+  #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+    ech_key_status_trace(srv, s->ssl_ctx);
+  #endif
+
+    int rc = SSL_CTX_ech_server_flush_keys(s->ssl_ctx,
+                                           s->ech_keydir_refresh_interval+5);
+    if (1 != rc)
+        log_error(srv->errh, __FILE__, __LINE__,
+          "SSL: SSL_CTX_ech_server_flush_keys failed (%d)", rc);
+
+    buffer * const b = s->ech_keydir;
+    const uint32_t dirlen = buffer_string_length(b);
+    DIR * const dp = opendir(b->ptr);
+    if (NULL == dp) {
+        log_perror(srv->errh,__FILE__,__LINE__,"%s dir:%s",__func__,b->ptr);
+        return 0;
+    }
+
+    /* load any echconfig files matching <name>.ech
+     *
+     * This code is derived from what was added to openssl s_server in
+     * apps/s_server.c stfcd openssl fork https://github.com/sftcd/openssl
+     */
+    for (struct dirent *ep; (ep = readdir(dp)); ) {
+        size_t nlen = strlen(ep->d_name);
+        if (nlen <= 4) continue;
+        if (0 != memcmp(ep->d_name+nlen-4, ".ech", 4)) continue;
+
+        buffer_append_path_len(b, ep->d_name, nlen);    /* *.ech */
+
+        if (1 == SSL_CTX_ech_server_enable(s->ssl_ctx, b->ptr)) {
+          #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+            log_error(srv->errh, __FILE__, __LINE__,
+              "SSL: SSL_CTX_ech_server_enable() worked for %s", b->ptr);
+          #endif
+        }
+        else {
+            log_error(srv->errh, __FILE__, __LINE__,
+              "SSL: SSL_CTX_ech_server_enable() failed for %s", b->ptr);
+            rc = 0;
+        }
+
+        buffer_string_set_length(b, dirlen);
+    }
+
+    closedir(dp);
+
+  #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+    ech_key_status_trace(srv, s->ssl_ctx);
+  #endif
+
+    if (1 == rc) s->ech_keydir_refresh_ts = cur_ts;
+    return rc;
+}
+
+
+static void
+mod_openssl_refresh_ech_keys (server * const srv, const plugin_data *p, const time_t cur_ts)
+{
+    if (NULL != p->ssl_ctxs) {
+        SSL_CTX * const ssl_ctx_global_scope = p->ssl_ctxs->ssl_ctx;
+        /* refresh ech keys (if not copy of global scope) */
+        for (uint32_t i = 1; i < srv->config_context->used; ++i) {
+            plugin_ssl_ctx * const s = p->ssl_ctxs + i;
+            if (s->ssl_ctx && s->ssl_ctx != ssl_ctx_global_scope)
+                mod_openssl_refresh_ech_keys_ctx(srv, s, cur_ts);
+        }
+        /* refresh ech keys from global scope */
+        if (ssl_ctx_global_scope)
+            mod_openssl_refresh_ech_keys_ctx(srv, p->ssl_ctxs + 0, cur_ts);
+    }
+}
+
+
+#ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+
+/* XXX: remove; for ECH development-only */
+static void ech_status_trace(request_st *r, SSL *ssl)
+{
+    char *sni_ech = NULL;
+    char *sni_clr = NULL;
+    const char *str;
+  #define s(x) #x
+    switch (SSL_ech_get_status(ssl, &sni_ech, &sni_clr)) {
+      case SSL_ECH_STATUS_SUCCESS:   str = s(SSL_ECH_STATUS_SUCCESS);   break;
+      case SSL_ECH_STATUS_NOT_TRIED: str = s(SSL_ECH_STATUS_NOT_TRIED); break;
+      case SSL_ECH_STATUS_FAILED:    str = s(SSL_ECH_STATUS_FAILED);    break;
+      case SSL_ECH_STATUS_BAD_NAME:  str = s(SSL_ECH_STATUS_BAD_NAME);  break;
+      case SSL_ECH_STATUS_BAD_CALL:  str = s(SSL_ECH_STATUS_BAD_CALL);  break;
+      case SSL_ECH_STATUS_TOOMANY:   str = s(SSL_ECH_STATUS_TOOMANY);   break;
+      case SSL_ECH_STATUS_GREASE:    str = s(SSL_ECH_STATUS_GREASE);    break;
+      default:                       str = "ECH status unknown";        break;
+    }
+  #undef s
+    if (sni_ech == NULL) sni_ech = "";
+    if (sni_clr == NULL) sni_clr = "";
+    log_error(r->conf.errh, __FILE__, __LINE__,
+              "ech_status: %s sni_clr: %s sni_ech: %s",str,sni_clr,sni_ech);
+}
+
+static unsigned int
+mod_openssl_ech_cb (SSL * const ssl, char * const str)
+{
+    /*(callback is run after successful ECH extension decryption)*/
+    UNUSED(ssl);
+    UNUSED(str);
+  #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+    handler_ctx * const hctx = (handler_ctx *) SSL_get_app_data(ssl);
+    ech_status_trace(hctx->r, ssl); /* XXX: remove; for ECH development-only */
+  #endif
+    return 1;
+}
+
+#endif /* LIGHTTPD_OPENSSL_ECH_DEBUG */
+
+#endif /* !OPENSSL_NO_ECH */
 
 
 INIT_FUNC(mod_openssl_init)
@@ -1311,6 +1467,12 @@ mod_openssl_SNI (handler_ctx *hctx, const char *servername, size_t len)
         return SSL_TLSEXT_ERR_ALERT_FATAL;
   #endif
 
+  #ifndef OPENSSL_NO_ECH
+    /* (might be called again after ECH is decrypted) */
+    if (r->conditional_is_valid & (1 << COMP_HTTP_HOST))
+        config_cond_cache_reset_item(r, COMP_HTTP_HOST);
+  #endif
+
     r->conditional_is_valid |= (1 << COMP_HTTP_SCHEME)
                             |  (1 << COMP_HTTP_HOST);
     mod_openssl_patch_config(r, &hctx->conf);
@@ -1339,6 +1501,22 @@ mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
 
     const unsigned char *name;
     size_t len, slen;
+  #ifdef TLSEXT_TYPE_ech
+    /* code currently inactive; see top of file #undef SSL_CLIENT_HELLO_SUCCESS.
+     * Were the openssl ECH callback (set with SSL_CTX_set_ech_callback()) to
+     * become something other than what it currently is (mainly informational),
+     * then we might reconsider using it.  An alternative idea is to leverage
+     * the cert_cb (always called during client hello processing and set with
+     * SSL_CTX_set_cert_cb()) to access outcome of ECH or SNI immediately prior
+     * to server certificate selection.  Prior to existence of cert_cb, the use
+     * of servername_callback (set with SSL_CTX_set_tlsext_servername_callback)
+     * was needed to handle SNI, but might now be folded into cert_cb. */
+   #if 0
+    if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_ech, &name, &len)) {
+        return SSL_CLIENT_HELLO_SUCCESS; /* defer to later ECH processing */
+    }
+   #endif
+  #endif
     if (!SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_server_name, &name, &len)) {
         return SSL_CLIENT_HELLO_SUCCESS; /* client did not provide SNI */
     }
@@ -2631,6 +2809,22 @@ network_init_ssl (server *srv, plugin_config_socket *s, plugin_data *p)
             return -1;
       #endif
 
+      #ifndef OPENSSL_NO_ECH
+        if (s->ech_opts) {
+          #if defined(LIGHTTPD_OPENSSL_ECH_DEBUG)
+            SSL_CTX_set_ech_callback(s->ssl_ctx, mod_openssl_ech_cb);
+          #endif
+            /* enable SSL_OP_ECH_TRIALDECRYPT by default unless disabled;
+             * prefer "Options" => "ECHTrialDecrypt"
+             * in lighttpd ssl.openssl.ssl-conf-cmd */
+            if (config_plugin_value_tobool(
+                  array_get_element_klen(s->ech_opts,
+                                         CONST_STR_LEN("trial-decrypt")), 1)) {
+                SSL_CTX_set_options(s->ssl_ctx, SSL_OP_ECH_TRIALDECRYPT);
+            }
+        }
+      #endif
+
         if (s->ssl_conf_cmd && s->ssl_conf_cmd->used) {
             if (0 != network_openssl_ssl_conf_cmd(srv, s)) return -1;
             /* (force compression disabled, the default, if HTTP/2 enabled) */
@@ -2665,6 +2859,9 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
      ,{ CONST_STR_LEN("ssl.stek-file"),
         T_CONFIG_STRING,
         T_CONFIG_SCOPE_SERVER }
+     ,{ CONST_STR_LEN("ssl.ech-opts"),
+        T_CONFIG_ARRAY_KVANY,
+        T_CONFIG_SCOPE_SOCKET }
      ,{ NULL, 0,
         T_CONFIG_UNSET,
         T_CONFIG_SCOPE_UNSET }
@@ -2732,6 +2929,9 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
               case 4: /* ssl.stek-file */
                 if (!buffer_is_blank(cpv->v.b))
                     p->ssl_stek_file = cpv->v.b->ptr;
+                break;
+              case 5: /* ssl.ech-opts */
+                *(const array **)&conf.ech_opts = cpv->v.a;
                 break;
               default:/* should not happen */
                 break;
@@ -2838,6 +3038,17 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
         if (0 == network_init_ssl(srv, &conf, p)) {
             plugin_ssl_ctx * const s = p->ssl_ctxs + sidx;
             s->ssl_ctx = conf.ssl_ctx;
+            if (conf.ech_opts) {
+                array *ech_opts = conf.ech_opts;
+                const data_unset *du;
+                du = array_get_element_klen(ech_opts, CONST_STR_LEN("keydir"));
+                s->ech_keydir = du ? &((data_string *)du)->value : NULL;
+                if (s->ech_keydir && buffer_string_is_empty(s->ech_keydir))
+                    s->ech_keydir = NULL;
+                du = array_get_element_klen(ech_opts, CONST_STR_LEN("refresh"));
+                s->ech_keydir_refresh_interval =
+                  config_plugin_value_to_int32(du, 1800);
+            }
         }
         else {
             SSL_CTX_free(conf.ssl_ctx);
@@ -2848,6 +3059,11 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
   #ifdef TLSEXT_TYPE_session_ticket
     if (rc == HANDLER_GO_ON && ssl_is_init)
         mod_openssl_session_ticket_key_check(p, log_epoch_secs);
+  #endif
+
+  #ifdef TLSEXT_TYPE_ech
+    if (rc == HANDLER_GO_ON && ssl_is_init)
+        mod_openssl_refresh_ech_keys(srv, p, log_epoch_secs);
   #endif
 
     free(srvplug.cvlist);
@@ -3827,6 +4043,38 @@ https_add_ssl_client_entries (request_st * const r, handler_ctx * const hctx)
 }
 
 
+#ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+static void
+http_cgi_ssl_ech(request_st * const r, SSL * const ssl)
+{
+    /* add to environment ECH status, inner SNI, and outer SNI */
+    char *sni_ech = NULL;
+    char *sni_clr = NULL;
+    const char *str;
+  #define s(x) #x
+    switch (SSL_ech_get_status(ssl, &sni_ech, &sni_clr)) {
+      case SSL_ECH_STATUS_SUCCESS:   str = s(SSL_ECH_STATUS_SUCCESS);   break;
+      case SSL_ECH_STATUS_NOT_TRIED: str = s(SSL_ECH_STATUS_NOT_TRIED); break;
+      case SSL_ECH_STATUS_FAILED:    str = s(SSL_ECH_STATUS_FAILED);    break;
+      case SSL_ECH_STATUS_BAD_NAME:  str = s(SSL_ECH_STATUS_BAD_NAME);  break;
+      case SSL_ECH_STATUS_BAD_CALL:  str = s(SSL_ECH_STATUS_BAD_CALL);  break;
+      case SSL_ECH_STATUS_TOOMANY:   str = s(SSL_ECH_STATUS_TOOMANY);   break;
+      case SSL_ECH_STATUS_GREASE:    str = s(SSL_ECH_STATUS_GREASE);    break;
+      default:                       str = "ECH status unknown";        break;
+    }
+  #undef s
+    if (NULL == sni_clr) *(const char **)&sni_clr = "NONE";
+    if (NULL == sni_ech) *(const char **)&sni_ech = "NONE";
+    http_header_env_set(r, CONST_STR_LEN("SSL_ECH_STATUS"),
+                        str, strlen(str));
+    http_header_env_set(r, CONST_STR_LEN("SSL_ECH_COVER"),
+                        sni_clr, strlen(sni_clr));
+    http_header_env_set(r, CONST_STR_LEN("SSL_ECH_HIDDEN"),
+                        sni_ech, strlen(sni_ech));
+}
+#endif
+
+
 static void
 http_cgi_ssl_env (request_st * const r, handler_ctx * const hctx)
 {
@@ -3848,6 +4096,10 @@ http_cgi_ssl_env (request_st * const r, handler_ctx * const hctx)
         http_header_env_set(r, CONST_STR_LEN("SSL_CIPHER_ALGKEYSIZE"),
                             buf, li_itostrn(buf, sizeof(buf), algkeysize));
     }
+
+  #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
+    http_cgi_ssl_ech(r, hctx->ssl);
+  #endif
 }
 
 
@@ -3912,6 +4164,10 @@ TRIGGER_FUNC(mod_openssl_handle_trigger) {
 
   #ifndef OPENSSL_NO_OCSP
     mod_openssl_refresh_stapling_files(srv, p, cur_ts);
+  #endif
+
+  #ifdef TLSEXT_TYPE_ech
+    mod_openssl_refresh_ech_keys(srv, p, cur_ts);
   #endif
 
     return HANDLER_GO_ON;
