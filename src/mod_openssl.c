@@ -39,6 +39,7 @@
 #include "plugin.h"
 
 #ifndef OPENSSL_NO_ESNI
+/* Just tagging the last version of ESNI before rebasing and staring on ECH */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
