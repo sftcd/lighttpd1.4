@@ -64,10 +64,9 @@ static int fdevent_solaris_port_poll(fdevents *ev, int timeout_ms) {
         int revents = ev->port_events[i].portev_events;
         if (0 == ((uintptr_t)fdn & 0x3)) {
             if (port_associate(pfd,PORT_SOURCE_FD,fd,(int)ud,(void*)ud) < 0) {
-                log_error_write(ev->srv, __FILE__, __LINE__, "SS",
-                                "port_associate failed: ", strerror(errno));
+                log_error(ev->errh,__FILE__,__LINE__,"port_associate failed");
             }
-            (*fdn->handler)(ev->srv, fdn->ctx, revents);
+            (*fdn->handler)(fdn->ctx, revents);
         }
         else {
             fdn->fde_ndx = -1;
@@ -84,7 +83,9 @@ int fdevent_solaris_port_init(fdevents *ev) {
 	force_assert(POLLERR   == FDEVENT_ERR);
 	force_assert(POLLHUP   == FDEVENT_HUP);
 	force_assert(POLLNVAL  == FDEVENT_NVAL);
+      #ifdef POLLRDHUP
 	force_assert(POLLRDHUP == FDEVENT_RDHUP);
+      #endif
 
 	ev->type        = FDEVENT_HANDLER_SOLARIS_PORT;
 	ev->event_set   = fdevent_solaris_port_event_set;

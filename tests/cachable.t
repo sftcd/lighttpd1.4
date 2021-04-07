@@ -8,7 +8,7 @@ BEGIN {
 
 use strict;
 use IO::Socket;
-use Test::More tests => 25;
+use Test::More tests => 24;
 use LightyTest;
 
 my $tf = LightyTest->new();
@@ -43,14 +43,6 @@ EOF
  );
 $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 304 } ];
 ok($tf->handle_http($t) == 0, 'Conditional GET - new If-Modified-Since');
-
-$t->{REQUEST}  = ( <<EOF
-GET / HTTP/1.0
-If-Modified-Since: $now; foo
-EOF
- );
-$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 304 } ];
-ok($tf->handle_http($t) == 0, 'Conditional GET - new If-Modified-Since, comment');
 
 $t->{REQUEST}  = ( <<EOF
 GET / HTTP/1.0
@@ -163,12 +155,14 @@ EOF
 }
 
 $t->{REQUEST}  = ( <<EOF
-GET / HTTP/1.0
+GET / HTTP/1.1
+Host: www.example.org
 If-None-Match: W/$etag
+Connection: close
 Range: bytes=0-0
 EOF
 );
-$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 206, 'HTTP-Content' => '<' } ];
+$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 206, 'HTTP-Content' => '<' } ];
 ok($tf->handle_http($t) == 0, 'A weak etag does not match for ranged requests');
 
 $t->{REQUEST}  = ( <<EOF

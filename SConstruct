@@ -12,7 +12,7 @@ except NameError:
 	string_types = str
 
 package = 'lighttpd'
-version = '1.4.55'
+version = '1.4.60'
 
 underscorify_reg = re.compile('[^A-Z0-9]')
 def underscorify(id):
@@ -140,6 +140,8 @@ class Autoconf:
 		try:
 			self.conf.env.ParseConfig(*args, **kw)
 			return True
+		except OSError:
+			return False
 		except Exception as e:
 			print(e.message, file=sys.stderr)
 			return False
@@ -239,6 +241,7 @@ vars.AddVariables(
 	BoolVariable('build_fullstatic', 'enable fullstatic build', 'no'),
 
 	BoolVariable('with_bzip2', 'enable bzip2 compression', 'no'),
+	BoolVariable('with_brotli', 'enable brotli compression', 'no'),
 	PackageVariable('with_dbi', 'enable dbi support', 'no'),
 	BoolVariable('with_fam', 'enable FAM/gamin support', 'no'),
 	BoolVariable('with_gdbm', 'enable gdbm support', 'no'),
@@ -252,7 +255,11 @@ vars.AddVariables(
 	BoolVariable('with_memcached', 'enable memcached support', 'no'),
 	PackageVariable('with_mysql', 'enable mysql support', 'no'),
 	BoolVariable('with_openssl', 'enable openssl support', 'no'),
+	PackageVariable('with_gnutls', 'enable GnuTLS support', 'no'),
+	PackageVariable('with_mbedtls', 'enable mbedTLS support', 'no'),
+	PackageVariable('with_nss', 'enable NSS crypto support', 'no'),
 	PackageVariable('with_wolfssl', 'enable wolfSSL support', 'no'),
+	BoolVariable('with_nettle', 'enable Nettle support', 'no'),
 	BoolVariable('with_pam', 'enable PAM auth support', 'no'),
 	PackageVariable('with_pcre', 'enable pcre support', 'yes'),
 	PackageVariable('with_pgsql', 'enable pgsql support', 'no'),
@@ -262,27 +269,29 @@ vars.AddVariables(
 	# with_valgrind not supported
 	# with_xattr not supported
 	PackageVariable('with_xml', 'enable xml support (required for webdav props)', 'no'),
+	BoolVariable('with_xxhash', 'build with system-provided xxhash', 'no'),
 	BoolVariable('with_zlib', 'enable deflate/gzip compression', 'no'),
+	BoolVariable('with_zstd', 'enable zstd compression', 'no'),
 
 	BoolVariable('with_all', 'enable all with_* features', 'no'),
 )
 
 env = Environment(
-	ENV = os.environ,
+	ENV = dict(os.environ),  # make sure we have a dict here so .Clone() works properly
 	variables = vars,
 	CPPPATH = Split('#sconsbuild/build')
 )
 
 env.Help(vars.GenerateHelpText(env))
 
-if env.subst('${CC}') is not '':
+if env.subst('${CC}') != '':
 	env['CC'] = env.subst('${CC}')
 
 env['package'] = package
 env['version'] = version
 if env['CC'] == 'gcc':
 	## we need x-open 6 and bsd 4.3 features
-	env.Append(CCFLAGS = Split('-Wall -O2 -g -W -pedantic -Wunused -Wshadow -std=gnu99'))
+	env.Append(CCFLAGS = Split('-pipe -Wall -O2 -g -W -pedantic -Wunused -Wshadow -std=gnu99'))
 
 env.Append(CPPFLAGS = [
 	'-D_FILE_OFFSET_BITS=64',
@@ -319,29 +328,39 @@ if 1:
 		autoconf.env.Append(APPEND_LIBS = '')
 
 	autoconf.env.Append(
+		LIBBROTLI = '',
 		LIBBZ2 = '',
 		LIBCRYPT = '',
 		LIBCRYPTO = '',
 		LIBDBI = '',
 		LIBDL = '',
-		LIBFCGI = '',
 		LIBGDBM = '',
+		LIBGNUTLS = '',
 		LIBGSSAPI_KRB5 = '',
 		LIBKRB5 = '',
 		LIBLBER = '',
 		LIBLDAP = '',
 		LIBLUA = '',
+		LIBMBEDTLS = '',
+		LIBMBEDX509 = '',
+		LIBMBEDCRYPTO = '',
 		LIBMEMCACHED = '',
 		LIBMYSQL = '',
+		LIBNSS = '',
 		LIBPAM = '',
 		LIBPCRE = '',
 		LIBPGSQL = '',
 		LIBSASL = '',
 		LIBSQLITE3 = '',
 		LIBSSL = '',
+		LIBSSLCRYPTO = '',
 		LIBUUID = '',
+		LIBWOLFSSL = '',
+		LIBX509 = '',
 		LIBXML2 = '',
+		LIBXXHASH = '',
 		LIBZ = '',
+		LIBZSTD = '',
 	)
 
 	autoconf.haveCHeaders([
@@ -360,6 +379,8 @@ if 1:
 		'sys/devpoll.h',
 		'sys/epoll.h',
 		'sys/filio.h',
+		'sys/inotify.h',
+		'sys/loadavg.h',
 		'sys/poll.h',
 		'sys/port.h',
 		'sys/prctl.h',
@@ -385,6 +406,7 @@ if 1:
 		'arc4random_buf',
 		'chroot',
 		'clock_gettime',
+		'copy_file_range',
 		'dup2',
 		'epoll_ctl',
 		'explicit_bzero',
@@ -396,7 +418,7 @@ if 1:
 		'getopt',
 		'getrlimit',
 		'getuid',
-		'inet_ntoa',
+		'inet_aton',
 		'inet_ntop',
 		'inet_pton',
 		'issetugid',
@@ -430,6 +452,7 @@ if 1:
 		'strftime',
 		'strstr',
 		'strtol',
+		'timegm',
 		'writev',
 	])
 	autoconf.haveFunc('getentropy', 'sys/random.h')
@@ -479,16 +502,19 @@ if 1:
 	if autoconf.CheckLibWithHeader('dl', 'dlfcn.h', 'C'):
 		autoconf.env.Append(LIBDL = 'dl')
 
-	# used in tests if present
-	if autoconf.CheckLibWithHeader('fcgi', 'fastcgi.h', 'C'):
-		autoconf.env.Append(LIBFCGI = 'fcgi')
-
 	if env['with_bzip2']:
 		if not autoconf.CheckLibWithHeader('bz2', 'bzlib.h', 'C'):
 			fail("Couldn't find bz2")
 		autoconf.env.Append(
 			CPPFLAGS = [ '-DHAVE_BZLIB_H', '-DHAVE_LIBBZ2' ],
 			LIBBZ2 = 'bz2',
+		)
+
+	if env['with_brotli']:
+		if not autoconf.CheckParseConfigForLib('LIBBROTLI', 'pkg-config --static --cflags --libs libbrotlienc'):
+			fail("Couldn't find libbrotlienc")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_BROTLI_ENCODE_H', '-DHAVE_BROTLI' ],
 		)
 
 	if env['with_dbi']:
@@ -499,7 +525,7 @@ if 1:
 			LIBDBI = 'dbi',
 		)
 
-	if env['with_fam']:
+	if env['with_fam'] and not autoconf.CheckCHeader('sys/inotify.h'):
 		if not autoconf.CheckLibWithHeader('fam', 'fam.h', 'C'):
 			fail("Couldn't find fam")
 		autoconf.env.Append(
@@ -559,7 +585,7 @@ if 1:
 
 	if env['with_lua']:
 		found_lua = False
-		for lua_name in ['lua5.3', 'lua-5.3', 'lua5.2', 'lua-5.2', 'lua5.1', 'lua-5.1', 'lua']:
+		for lua_name in ['lua5.4', 'lua-5.4', 'lua5.3', 'lua-5.3', 'lua5.2', 'lua-5.2', 'lua5.1', 'lua-5.1', 'lua']:
 			print("Searching for lua: " + lua_name + " >= 5.0")
 			if autoconf.CheckParseConfigForLib('LIBLUA', "pkg-config '" + lua_name + " >= 5.0' --cflags --libs"):
 				autoconf.env.Append(CPPFLAGS = [ '-DHAVE_LUA_H' ])
@@ -582,12 +608,19 @@ if 1:
 			fail("Couldn't find mysql")
 		autoconf.env.Append(CPPFLAGS = [ '-DHAVE_MYSQL_H', '-DHAVE_LIBMYSQL' ])
 
+	if env['with_nss']:
+		nss_config = autoconf.checkProgram('nss', 'nss-config')
+		if not autoconf.CheckParseConfigForLib('LIBNSS', nss_config + ' --cflags --libs'):
+			fail("Couldn't find NSS")
+		autoconf.env.Append(CPPFLAGS = [ '-DHAVE_NSS3_NSS_H' ])
+
 	if env['with_openssl']:
 		if not autoconf.CheckLibWithHeader('ssl', 'openssl/ssl.h', 'C'):
 			fail("Couldn't find openssl")
 		autoconf.env.Append(
 			CPPFLAGS = [ '-DHAVE_OPENSSL_SSL_H', '-DHAVE_LIBSSL'],
 			LIBSSL = 'ssl',
+			LIBSSLCRYPTO = 'crypto',
 			LIBCRYPTO = 'crypto',
 		)
 
@@ -602,9 +635,40 @@ if 1:
 			fail("Couldn't find wolfssl")
 		autoconf.env.Append(
 			CPPFLAGS = [ '-DHAVE_WOLFSSL_SSL_H' ],
-			LIBSSL = '',
+			LIBWOLFSSL= 'wolfssl',
 			LIBCRYPTO = 'wolfssl',
 		)
+
+	if env['with_mbedtls']:
+		if not autoconf.CheckLibWithHeader('mbedtls', 'mbedtls/ssl.h', 'C'):
+			fail("Couldn't find mbedtls")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_LIBMBEDCRYPTO' ],
+			LIBMBEDTLS = 'mbedtls',
+			LIBMBEDX509 = 'mbedx509',
+			LIBMBEDCRYPTO = 'mbedcrypto',
+			LIBCRYPTO = 'mbedcrypto',
+		)
+
+	if env['with_nettle']:
+		if not autoconf.CheckLibWithHeader('nettle', 'nettle/nettle-types.h', 'C'):
+			fail("Couldn't find Nettle")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_NETTLE_NETTLE_TYPES_H' ],
+			LIBCRYPTO = 'nettle',
+		)
+
+	if env['with_gnutls']:
+		if not autoconf.CheckLibWithHeader('gnutls', 'gnutls/crypto.h', 'C'):
+			fail("Couldn't find gnutls")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_GNUTLS_CRYPTO_H' ],
+			LIBGNUTLS = 'gnutls',
+		)
+		if not autoconf.env.exists('LIBCRYPTO'):
+			autoconf.env.Append(
+				LIBCRYPTO = 'gnutls',
+			)
 
 	if env['with_pam']:
 		if not autoconf.CheckLibWithHeader('pam', 'security/pam_appl.h', 'C'):
@@ -655,12 +719,28 @@ if 1:
 			fail("Couldn't find xml2")
 		autoconf.env.Append(CPPFLAGS = [ '-DHAVE_LIBXML_H', '-DHAVE_LIBXML2' ])
 
+	if env['with_xxhash']:
+		if not autoconf.CheckLibWithHeader('xxhash', 'xxhash.h', 'C'):
+			fail("Couldn't find xxhash")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_XXHASH_H' ],
+			LIBXXHASH = 'xxhash',
+		)
+
 	if env['with_zlib']:
 		if not autoconf.CheckLibWithHeader('z', 'zlib.h', 'C'):
 			fail("Couldn't find zlib")
 		autoconf.env.Append(
 			CPPFLAGS = [ '-DHAVE_ZLIB_H', '-DHAVE_LIBZ' ],
 			LIBZ = 'z',
+		)
+
+	if env['with_zstd']:
+		if not autoconf.CheckLibWithHeader('zstd', 'zstd.h', 'C'):
+			fail("Couldn't find zstd")
+		autoconf.env.Append(
+			CPPFLAGS = [ '-DHAVE_ZSTD_H', '-DHAVE_ZSTD' ],
+			LIBZSTD = 'zstd',
 		)
 
 	env = autoconf.Finish()

@@ -1,3 +1,10 @@
+/*
+ * http_auth - HTTP Auth backend registration, low-level shared funcs
+ *
+ * Fully-rewritten from original
+ * Copyright(c) 2016 Glenn Strauss gstrauss()gluelogic.com  All rights reserved
+ * License: BSD 3-clause (same as lighttpd)
+ */
 #include "first.h"
 
 #include "http_auth.h"
@@ -113,22 +120,14 @@ http_auth_require_t * http_auth_require_init (void)
 {
     http_auth_require_t *require = calloc(1, sizeof(http_auth_require_t));
     force_assert(NULL != require);
-
-    require->realm = buffer_init();
-    require->valid_user = 0;
-    require->user = array_init();
-    require->group = array_init();
-    require->host = array_init();
-
     return require;
 }
 
 void http_auth_require_free (http_auth_require_t * const require)
 {
-    buffer_free(require->realm);
-    array_free(require->user);
-    array_free(require->group);
-    array_free(require->host);
+    array_free_data(&require->user);
+    array_free_data(&require->group);
+    array_free_data(&require->host);
     free(require);
 }
 
@@ -138,7 +137,7 @@ void http_auth_require_free (http_auth_require_t * const require)
 static int http_auth_array_contains (const array * const a, const char * const k, const size_t klen)
 {
     for (size_t i = 0, used = a->used; i < used; ++i) {
-        if (buffer_is_equal_string(a->data[i]->key, k, klen)) {
+        if (buffer_is_equal_string(&a->data[i]->key, k, klen)) {
             return 1;
         }
     }
@@ -149,26 +148,26 @@ int http_auth_match_rules (const http_auth_require_t * const require, const char
 {
     if (NULL != user
         && (require->valid_user
-            || http_auth_array_contains(require->user, user, strlen(user)))) {
+            || http_auth_array_contains(&require->user, user, strlen(user)))) {
         return 1; /* match */
     }
 
     if (NULL != group
-        && http_auth_array_contains(require->group, group, strlen(group))) {
+        && http_auth_array_contains(&require->group, group, strlen(group))) {
         return 1; /* match */
     }
 
     if (NULL != host
-        && http_auth_array_contains(require->host, host, strlen(host))) {
+        && http_auth_array_contains(&require->host, host, strlen(host))) {
         return 1; /* match */
     }
 
     return 0; /* no match */
 }
 
-void http_auth_setenv(connection *con, const char *username, size_t ulen, const char *auth_type, size_t alen) {
-    http_header_env_set(con, CONST_STR_LEN("REMOTE_USER"), username, ulen);
-    http_header_env_set(con, CONST_STR_LEN("AUTH_TYPE"), auth_type, alen);
+void http_auth_setenv(request_st * const r, const char *username, size_t ulen, const char *auth_type, size_t alen) {
+    http_header_env_set(r, CONST_STR_LEN("REMOTE_USER"), username, ulen);
+    http_header_env_set(r, CONST_STR_LEN("AUTH_TYPE"), auth_type, alen);
 }
 
 unsigned int http_auth_digest_len (int algo)
@@ -193,10 +192,10 @@ int http_auth_digest_hex2bin (const char *hexstr, size_t len, unsigned char *bin
         int hi = hexstr[i];
         int lo = hexstr[i+1];
         if ('0' <= hi && hi <= '9')                    hi -= '0';
-        else if ((hi |= 0x20), 'a' <= hi && hi <= 'f') hi += -'a' + 10;
+        else if ((uint32_t)(hi |= 0x20)-'a' <= 'f'-'a')hi += -'a' + 10;
         else                                           return -1;
         if ('0' <= lo && lo <= '9')                    lo -= '0';
-        else if ((lo |= 0x20), 'a' <= lo && lo <= 'f') lo += -'a' + 10;
+        else if ((uint32_t)(lo |= 0x20)-'a' <= 'f'-'a')lo += -'a' + 10;
         else                                           return -1;
         bin[(i >> 1)] = (unsigned char)((hi << 4) | lo);
     }
@@ -210,9 +209,9 @@ int http_auth_md5_hex2lc (char *md5hex)
     int i;
     for (i = 0; md5hex[i]; ++i) {
         int c = md5hex[i];
-        if ('0' <= c && c <= '9')                   continue;
-        else if ((c |= 0x20), 'a' <= c && c <= 'f') md5hex[i] = c;
-        else                                        return -1;
+        if ('0' <= c && c <= '9')                      continue;
+        else if ((uint32_t)(c |= 0x20)-'a' <= 'f'-'a') md5hex[i] = c;
+        else                                           return -1;
     }
     return (32 == i) ? 0 : -1; /*(Note: char *md5hex must be a 32-char string)*/
 }

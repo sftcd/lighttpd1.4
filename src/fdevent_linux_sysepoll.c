@@ -36,12 +36,11 @@ static int fdevent_linux_sysepoll_event_set(fdevents *ev, fdnode *fdn, int event
 
 static int fdevent_linux_sysepoll_poll(fdevents * const ev, int timeout_ms) {
     int n = epoll_wait(ev->epoll_fd, ev->epoll_events, ev->maxfds, timeout_ms);
-    server * const srv = ev->srv;
     for (int i = 0; i < n; ++i) {
         fdnode * const fdn = (fdnode *)ev->epoll_events[i].data.ptr;
         int revents = ev->epoll_events[i].events;
         if ((fdevent_handler)NULL != fdn->handler) {
-            (*fdn->handler)(srv, fdn->ctx, revents);
+            (*fdn->handler)(fdn->ctx, revents);
         }
     }
     return n;
@@ -64,9 +63,12 @@ int fdevent_linux_sysepoll_init(fdevents *ev) {
 	ev->poll      = fdevent_linux_sysepoll_poll;
 	ev->free      = fdevent_linux_sysepoll_free;
 
+  #ifdef EPOLL_CLOEXEC
+	if (-1 == (ev->epoll_fd = epoll_create1(EPOLL_CLOEXEC))) return -1;
+  #else
 	if (-1 == (ev->epoll_fd = epoll_create(ev->maxfds))) return -1;
-
 	fdevent_setfd_cloexec(ev->epoll_fd);
+  #endif
 
 	ev->epoll_events = malloc(ev->maxfds * sizeof(*ev->epoll_events));
 	force_assert(NULL != ev->epoll_events);

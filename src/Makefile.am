@@ -10,6 +10,7 @@ noinst_PROGRAMS=\
 	t/test_mod_access \
 	t/test_mod_evhost \
 	t/test_mod_simple_vhost \
+	t/test_mod_userdir \
 	t/test_request
 
 sbin_PROGRAMS=lighttpd lighttpd-angel
@@ -25,6 +26,7 @@ TESTS=\
 	t/test_mod_access$(EXEEXT) \
 	t/test_mod_evhost$(EXEEXT) \
 	t/test_mod_simple_vhost$(EXEEXT) \
+	t/test_mod_userdir$(EXEEXT) \
 	t/test_request$(EXEEXT)
 
 lemon$(BUILD_EXEEXT): lemon.c
@@ -37,12 +39,6 @@ lighttpd_angel_SOURCES=lighttpd-angel.c
 versionstamp:
 	@test -f versionstamp.h || touch versionstamp.h; \
 	REVISION=""; \
-	if test -d "$(top_srcdir)/.svn" -a -x "`which svnversion`"; then \
-		REVISION="$$(LANG= LC_ALL=C svnversion "$(top_srcdir)" 2>/dev/null || echo exported)"; \
-		if test "$$REVISION" = "exported"; then \
-			REVISION=""; \
-		fi; \
-	fi; \
 	if test -z "$$REVISION" -a -d "$(top_srcdir)/.git" -a -x "`which git`"; then \
 		REVISION="$$(cd "$(top_srcdir)"; LANG= LC_ALL=C git describe --always 2>/dev/null || echo)"; \
 	fi; \
@@ -75,32 +71,36 @@ CLEANFILES = versionstamp.h versionstamp.h.tmp lemon$(BUILD_EXEEXT)
 
 common_src=base64.c buffer.c burl.c log.c \
 	http_header.c http_kv.c keyvalue.c chunk.c  \
-	http_chunk.c stream.c fdevent.c gw_backend.c \
-	stat_cache.c plugin.c joblist.c etag.c array.c \
+	http_chunk.c fdevent.c gw_backend.c \
+	stat_cache.c plugin.c http_etag.c array.c \
 	data_string.c data_array.c \
-	data_integer.c algo_sha1.c md5.c \
-	vector.c \
+	data_integer.c \
+	algo_hmac.c algo_md5.c algo_sha1.c algo_splaytree.c \
 	fdevent_select.c fdevent_libev.c \
 	fdevent_poll.c fdevent_linux_sysepoll.c \
 	fdevent_solaris_devpoll.c fdevent_solaris_port.c \
 	fdevent_freebsd_kqueue.c \
-	data_config.c \
-	crc32.c \
 	connections-glue.c \
 	configfile-glue.c \
 	http-header-glue.c \
 	http_auth.c \
+	http_cgi.c \
+	http_date.c \
 	http_vhostdb.c \
 	rand.c \
 	request.c \
 	sock_addr.c \
-	splaytree.c \
 	safe_memclear.c
 
-src = server.c response.c connections.c \
-	inet_ntop_cache.c \
+src = server.c response.c connections.c h2.c reqpool.c \
+	sock_addr_cache.c \
 	network.c \
 	network_write.c \
+	ls-hpack/lshpack.c \
+	algo_xxhash.c \
+	http_range.c \
+	data_config.c \
+	vector.c \
 	configfile.c configparser.c
 
 lib_LTLIBRARIES =
@@ -166,7 +166,7 @@ lib_LTLIBRARIES += mod_cml.la
 mod_cml_la_SOURCES = mod_cml.c mod_cml_lua.c mod_cml_funcs.c
 mod_cml_la_CFLAGS = $(AM_CFLAGS) $(LUA_CFLAGS)
 mod_cml_la_LDFLAGS = $(common_module_ldflags)
-mod_cml_la_LIBADD = $(MEMCACHED_LIB) $(common_libadd) $(LUA_LIBS) -lm
+mod_cml_la_LIBADD = $(MEMCACHED_LIB) $(common_libadd) $(LUA_LIBS) $(CRYPTO_LIB) -lm
 endif
 
 if BUILD_MOD_TRIGGER_B4_DL
@@ -268,7 +268,7 @@ mod_rrdtool_la_LIBADD = $(common_libadd)
 lib_LTLIBRARIES += mod_usertrack.la
 mod_usertrack_la_SOURCES = mod_usertrack.c
 mod_usertrack_la_LDFLAGS = $(common_module_ldflags)
-mod_usertrack_la_LIBADD = $(common_libadd)
+mod_usertrack_la_LIBADD = $(common_libadd) $(CRYPTO_LIB)
 
 lib_LTLIBRARIES += mod_proxy.la
 mod_proxy_la_SOURCES = mod_proxy.c
@@ -310,6 +310,11 @@ mod_simple_vhost_la_SOURCES = mod_simple_vhost.c
 mod_simple_vhost_la_LDFLAGS = $(common_module_ldflags)
 mod_simple_vhost_la_LIBADD = $(common_libadd)
 
+lib_LTLIBRARIES += mod_ajp13.la
+mod_ajp13_la_SOURCES = mod_ajp13.c
+mod_ajp13_la_LDFLAGS = $(common_module_ldflags)
+mod_ajp13_la_LIBADD = $(common_libadd)
+
 lib_LTLIBRARIES += mod_fastcgi.la
 mod_fastcgi_la_SOURCES = mod_fastcgi.c
 mod_fastcgi_la_LDFLAGS = $(common_module_ldflags)
@@ -325,15 +330,10 @@ mod_access_la_SOURCES = mod_access.c
 mod_access_la_LDFLAGS = $(common_module_ldflags)
 mod_access_la_LIBADD = $(common_libadd)
 
-lib_LTLIBRARIES += mod_compress.la
-mod_compress_la_SOURCES = mod_compress.c
-mod_compress_la_LDFLAGS = $(common_module_ldflags)
-mod_compress_la_LIBADD = $(Z_LIB) $(BZ_LIB) $(common_libadd)
-
 lib_LTLIBRARIES += mod_deflate.la
 mod_deflate_la_SOURCES = mod_deflate.c
-mod_deflate_la_LDFLAGS = $(common_module_ldflags)
-mod_deflate_la_LIBADD = $(Z_LIB) $(BZ_LIB) $(common_libadd)
+mod_deflate_la_LDFLAGS = $(BROTLI_CFLAGS) $(common_module_ldflags)
+mod_deflate_la_LIBADD = $(Z_LIB) $(ZSTD_LIB) $(BZ_LIB) $(BROTLI_LIBS) $(common_libadd)
 
 lib_LTLIBRARIES += mod_auth.la
 mod_auth_la_SOURCES = mod_auth.c
@@ -344,6 +344,14 @@ lib_LTLIBRARIES += mod_authn_file.la
 mod_authn_file_la_SOURCES = mod_authn_file.c
 mod_authn_file_la_LDFLAGS = $(common_module_ldflags)
 mod_authn_file_la_LIBADD = $(CRYPT_LIB) $(CRYPTO_LIB) $(common_libadd)
+
+if BUILD_WITH_DBI
+lib_LTLIBRARIES += mod_authn_dbi.la
+mod_authn_dbi_la_SOURCES = mod_authn_dbi.c
+mod_authn_dbi_la_LDFLAGS = $(common_module_ldflags)
+mod_authn_dbi_la_LIBADD = $(CRYPT_LIB) $(DBI_LIBS) $(CRYPTO_LIB) $(common_libadd)
+mod_authn_dbi_la_CPPFLAGS = $(DBI_CFLAGS)
+endif
 
 if BUILD_WITH_KRB5
 lib_LTLIBRARIES += mod_authn_gssapi.la
@@ -370,7 +378,7 @@ if BUILD_WITH_MYSQL
 lib_LTLIBRARIES += mod_authn_mysql.la
 mod_authn_mysql_la_SOURCES = mod_authn_mysql.c
 mod_authn_mysql_la_LDFLAGS = $(common_module_ldflags)
-mod_authn_mysql_la_LIBADD = $(CRYPT_LIB) $(MYSQL_LIBS) $(common_libadd)
+mod_authn_mysql_la_LIBADD = $(CRYPT_LIB) $(MYSQL_LIBS) $(CRYPTO_LIB) $(common_libadd)
 mod_authn_mysql_la_CPPFLAGS = $(MYSQL_CFLAGS)
 endif
 
@@ -386,8 +394,41 @@ if BUILD_WITH_OPENSSL
 lib_LTLIBRARIES += mod_openssl.la
 mod_openssl_la_SOURCES = mod_openssl.c
 mod_openssl_la_LDFLAGS = $(common_module_ldflags)
-mod_openssl_la_LIBADD = $(SSL_LIB) $(common_libadd)
+mod_openssl_la_LIBADD = $(OPENSSL_LIBS) $(common_libadd)
+mod_openssl_la_CPPFLAGS = $(OPENSSL_CFLAGS)
 endif
+
+if BUILD_WITH_MBEDTLS
+lib_LTLIBRARIES += mod_mbedtls.la
+mod_mbedtls_la_SOURCES = mod_mbedtls.c
+mod_mbedtls_la_LDFLAGS = $(common_module_ldflags)
+mod_mbedtls_la_LIBADD = $(MTLS_LIBS) $(common_libadd)
+endif
+
+if BUILD_WITH_GNUTLS
+lib_LTLIBRARIES += mod_gnutls.la
+mod_gnutls_la_SOURCES = mod_gnutls.c
+mod_gnutls_la_LDFLAGS = $(common_module_ldflags)
+mod_gnutls_la_LIBADD = $(GNUTLS_LIBS) $(common_libadd)
+mod_gnutls_la_CPPFLAGS = $(GNUTLS_CFLAGS)
+endif
+
+if BUILD_WITH_NSS
+lib_LTLIBRARIES += mod_nss.la
+mod_nss_la_SOURCES = mod_nss.c
+mod_nss_la_LDFLAGS = $(common_module_ldflags)
+mod_nss_la_LIBADD = $(NSS_LIBS) $(common_libadd)
+mod_nss_la_CPPFLAGS = $(NSS_CFLAGS)
+endif
+
+if BUILD_WITH_WOLFSSL
+lib_LTLIBRARIES += mod_wolfssl.la
+mod_wolfssl_la_SOURCES = mod_wolfssl.c
+mod_wolfssl_la_LDFLAGS = $(common_module_ldflags)
+mod_wolfssl_la_LIBADD = $(WOLFSSL_LIBS) $(common_libadd)
+mod_wolfssl_la_CPPFLAGS = $(WOLFSSL_CFLAGS)
+endif
+
 
 lib_LTLIBRARIES += mod_rewrite.la
 mod_rewrite_la_SOURCES = mod_rewrite.c
@@ -421,20 +462,29 @@ mod_wstunnel_la_LIBADD = $(common_libadd) $(CRYPTO_LIB)
 
 
 hdr = base64.h buffer.h burl.h network.h log.h http_kv.h keyvalue.h \
-	response.h request.h fastcgi.h chunk.h \
-	first.h settings.h http_chunk.h \
-	algo_sha1.h md5.h http_auth.h http_header.h http_vhostdb.h stream.h \
+	response.h request.h reqpool.h chunk.h h2.h \
+	first.h http_chunk.h \
+	algo_hmac.h \
+	algo_md.h algo_md5.h algo_sha1.h algo_splaytree.h algo_xxhash.h \
+	http_auth.h http_cgi.h http_date.h \
+	http_header.h http_range.h http_vhostdb.h \
 	fdevent.h gw_backend.h connections.h base.h base_decls.h stat_cache.h \
-	plugin.h \
-	etag.h joblist.h array.h vector.h crc32.h \
+	plugin.h plugin_config.h \
+	http_etag.h array.h vector.h \
 	fdevent_impl.h network_write.h configfile.h \
-	mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
+	mod_ssi.h mod_ssi_expr.h \
+	sock_addr_cache.h \
 	configparser.h mod_ssi_exprparser.h \
 	rand.h \
-	sys-crypto.h sys-endian.h sys-mmap.h sys-socket.h sys-strings.h \
+	sys-crypto.h sys-crypto-md.h \
+	sys-endian.h sys-mmap.h sys-socket.h sys-strings.h sys-time.h \
 	mod_cml.h mod_cml_funcs.h \
-	safe_memclear.h sock_addr.h splaytree.h status_counter.h \
-	mod_magnet_cache.h
+	safe_memclear.h sock_addr.h status_counter.h \
+	mod_magnet_cache.h \
+	ls-hpack/lshpack.h \
+	ls-hpack/lsxpack_header.h \
+	ls-hpack/huff-tables.h \
+	compat/fastcgi.h
 
 
 DEFS= @DEFS@ -DHAVE_VERSIONSTAMP_H -DLIBRARY_DIR="\"$(libdir)\"" -DSBIN_DIR="\"$(sbindir)\""
@@ -448,11 +498,11 @@ lighttpd_SOURCES = \
   $(src) \
   mod_access.c \
   mod_accesslog.c \
+  mod_ajp13.c \
   mod_alias.c \
   mod_auth.c \
   mod_authn_file.c \
   mod_cgi.c \
-  mod_compress.c \
   mod_deflate.c \
   mod_dirlisting.c \
   mod_evasive.c \
@@ -483,9 +533,10 @@ lighttpd_CPPFLAGS = \
   $(FAM_CFLAGS) $(LIBEV_CFLAGS) $(LIBUNWIND_CFLAGS)
 lighttpd_LDADD = \
   $(common_libadd) \
-  $(CRYPT_LIB) $(CRYPTO_LIB) \
+  $(CRYPT_LIB) $(CRYPTO_LIB) $(XXHASH_LIBS) \
   $(XML_LIBS) $(SQLITE_LIBS) $(UUID_LIBS) $(ELFTC_LIB) \
-  $(PCRE_LIB) $(Z_LIB) $(BZ_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) \
+  $(PCRE_LIB) $(Z_LIB) $(ZSTD_LIB) $(BZ_LIB) $(BROTLI_LIBS) \
+  $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) \
   $(FAM_LIBS) $(LIBEV_LIBS) $(LIBUNWIND_LIBS)
 lighttpd_LDFLAGS = -export-dynamic
 
@@ -526,13 +577,33 @@ lighttpd_CPPFLAGS += $(PGSQL_CFLAGS)
 lighttpd_LDADD += $(PGSQL_LIBS)
 endif
 if BUILD_WITH_DBI
-lighttpd_SOURCES += mod_vhostdb_dbi.c
+lighttpd_SOURCES += mod_authn_dbi.c mod_vhostdb_dbi.c
 lighttpd_CPPFLAGS += $(DBI_CFLAGS)
 lighttpd_LDADD += $(DBI_LIBS)
 endif
 if BUILD_WITH_OPENSSL
 lighttpd_SOURCES += mod_openssl.c
-lighttpd_LDADD += $(SSL_LIB)
+lighttpd_CPPFLAGS += $(OPENSSL_CFLAGS)
+lighttpd_LDADD += $(OPENSSL_LIBS)
+endif
+if BUILD_WITH_MBEDTLS
+lighttpd_SOURCES += mod_mbedtls.c
+lighttpd_LDADD += $(MTLS_LIBS)
+endif
+if BUILD_WITH_GNUTLS
+lighttpd_SOURCES += mod_gnutls.c
+lighttpd_CPPFLAGS += $(GNUTLS_CFLAGS)
+lighttpd_LDADD += $(GNUTLS_LIBS)
+endif
+if BUILD_WITH_NSS
+lighttpd_SOURCES += mod_nss.c
+lighttpd_CPPFLAGS += $(NSS_CFLAGS)
+lighttpd_LDADD += $(NSS_LIBS)
+endif
+if BUILD_WITH_WOLFSSL
+lighttpd_SOURCES += mod_wolfssl.c
+lighttpd_CPPFLAGS += $(WOLFSSL_CFLAGS)
+lighttpd_LDADD += $(WOLFSSL_LIBS)
 endif
 if BUILD_WITH_MEMCACHED
 lighttpd_CPPFLAGS += $(MEMCACHED_CFLAGS)
@@ -550,7 +621,7 @@ else
 ## default lighttpd server
 lighttpd_SOURCES = $(src)
 lighttpd_CPPFLAGS = $(FAM_CFLAGS) $(LIBEV_CFLAGS)
-lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(CRYPTO_LIB) $(FAM_LIBS) $(LIBEV_LIBS) $(LIBUNWIND_LIBS)
+lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(CRYPTO_LIB) $(XXHASH_LIBS) $(FAM_LIBS) $(LIBEV_LIBS) $(LIBUNWIND_LIBS)
 lighttpd_LDFLAGS = -export-dynamic
 
 endif
@@ -573,20 +644,24 @@ t_test_configfile_LDADD = $(PCRE_LIB) $(LIBUNWIND_LIBS)
 t_test_keyvalue_SOURCES = t/test_keyvalue.c burl.c buffer.c base64.c array.c data_integer.c data_string.c log.c
 t_test_keyvalue_LDADD = $(PCRE_LIB) $(LIBUNWIND_LIBS)
 
-t_test_mod_access_SOURCES = t/test_mod_access.c configfile-glue.c buffer.c array.c data_config.c data_integer.c data_string.c http_header.c http_kv.c vector.c log.c sock_addr.c
-t_test_mod_access_LDADD = $(PCRE_LIB) $(LIBUNWIND_LIBS)
+t_test_mod_access_SOURCES = t/test_mod_access.c buffer.c array.c data_integer.c data_string.c log.c
+t_test_mod_access_LDADD = $(LIBUNWIND_LIBS)
 
-t_test_mod_evhost_SOURCES = t/test_mod_evhost.c configfile-glue.c buffer.c array.c data_config.c data_integer.c data_string.c http_header.c http_kv.c vector.c log.c sock_addr.c
-t_test_mod_evhost_LDADD = $(PCRE_LIB) $(LIBUNWIND_LIBS)
+t_test_mod_evhost_SOURCES = t/test_mod_evhost.c buffer.c array.c data_integer.c data_string.c log.c
+t_test_mod_evhost_LDADD = $(LIBUNWIND_LIBS)
 
-t_test_mod_simple_vhost_SOURCES = t/test_mod_simple_vhost.c configfile-glue.c buffer.c array.c data_config.c data_integer.c data_string.c http_header.c http_kv.c vector.c log.c sock_addr.c
-t_test_mod_simple_vhost_LDADD = $(PCRE_LIB) $(LIBUNWIND_LIBS)
+t_test_mod_simple_vhost_SOURCES = t/test_mod_simple_vhost.c buffer.c array.c data_integer.c data_string.c log.c
+t_test_mod_simple_vhost_LDADD = $(LIBUNWIND_LIBS)
 
-t_test_request_SOURCES = t/test_request.c request.c buffer.c array.c data_integer.c data_string.c http_header.c http_kv.c log.c sock_addr.c
+t_test_mod_userdir_SOURCES = t/test_mod_userdir.c buffer.c array.c data_integer.c data_string.c log.c
+t_test_mod_userdir_LDADD = $(LIBUNWIND_LIBS)
+
+t_test_request_SOURCES = t/test_request.c base64.c buffer.c burl.c array.c data_integer.c data_string.c http_header.c http_kv.c log.c sock_addr.c
 t_test_request_LDADD = $(LIBUNWIND_LIBS)
 
 noinst_HEADERS   = $(hdr)
 EXTRA_DIST = \
+	t/README \
 	mod_skeleton.c \
 	configparser.y \
 	mod_ssi_exprparser.y \

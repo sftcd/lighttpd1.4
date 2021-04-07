@@ -5,17 +5,19 @@
 #include "base_decls.h"
 #include "buffer.h"
 
+__attribute_cold__
 void http_vhostdb_dumbdata_reset (void);
-
-struct http_vhostdb_backend_t;
 
 typedef struct http_vhostdb_backend_t {
     const char *name;
-    int(*query)(server *srv, connection *con, void *p_d, buffer *result);
+    int(*query)(request_st *r, void *p_d, buffer *result);
     void *p_d;
 } http_vhostdb_backend_t;
 
+__attribute_cold__
 const http_vhostdb_backend_t * http_vhostdb_backend_get (const buffer *name);
+
+__attribute_cold__
 void http_vhostdb_backend_set (const http_vhostdb_backend_t *backend);
 
 #endif
