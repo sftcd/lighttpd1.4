@@ -92,6 +92,7 @@
 #endif
 
 #ifndef OPENSSL_NO_ECH
+#define LIGHTTPD_OPENSSL_ECH_DEBUG // SF: take out
 #include <openssl/ech.h>
 #endif
 
@@ -552,6 +553,16 @@ mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, 
   #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
     ech_key_status_trace(srv, s->ssl_ctx);
   #endif
+
+    /*
+     * Nothing to do if refresh time is zero or negative and we
+     * already have some keys loaded
+     */
+    if (s->ech_keydir_refresh_interval <= 0) {
+        int nkeys = 0;
+        if (1 != SSL_CTX_ech_server_key_status(s->ssl_ctx, &nkeys) || nkeys > 0)
+            return 1;
+    }
 
     int rc = SSL_CTX_ech_server_flush_keys(s->ssl_ctx,
                                            s->ech_keydir_refresh_interval+5);
