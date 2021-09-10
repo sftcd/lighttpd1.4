@@ -649,8 +649,8 @@ static void ech_status_trace(request_st *r, SSL *ssl)
       case SSL_ECH_STATUS_FAILED:    str = s(SSL_ECH_STATUS_FAILED);    break;
       case SSL_ECH_STATUS_BAD_NAME:  str = s(SSL_ECH_STATUS_BAD_NAME);  break;
       case SSL_ECH_STATUS_BAD_CALL:  str = s(SSL_ECH_STATUS_BAD_CALL);  break;
-      case SSL_ECH_STATUS_TOOMANY:   str = s(SSL_ECH_STATUS_TOOMANY);   break;
       case SSL_ECH_STATUS_GREASE:    str = s(SSL_ECH_STATUS_GREASE);    break;
+      case SSL_ECH_STATUS_BACKEND:    str = s(SSL_ECH_STATUS_BACKEND);  break;
       default:                       str = "ECH status unknown";        break;
     }
   #undef s
@@ -2997,7 +2997,7 @@ network_init_ssl (server *srv, plugin_config_socket *s, plugin_data *p)
       #ifndef OPENSSL_NO_ECH
         if (s->ech_opts) {
           #if defined(LIGHTTPD_OPENSSL_ECH_DEBUG)
-            SSL_CTX_set_ech_callback(s->ssl_ctx, mod_openssl_ech_cb);
+            SSL_CTX_ech_set_callback(s->ssl_ctx, mod_openssl_ech_cb);
           #endif
             /* enable SSL_OP_ECH_TRIALDECRYPT by default unless disabled;
              * prefer "Options" => "ECHTrialDecrypt"
@@ -4304,7 +4304,6 @@ http_cgi_ssl_ech(request_st * const r, SSL * const ssl)
       case SSL_ECH_STATUS_FAILED:    str = s(SSL_ECH_STATUS_FAILED);    break;
       case SSL_ECH_STATUS_BAD_NAME:  str = s(SSL_ECH_STATUS_BAD_NAME);  break;
       case SSL_ECH_STATUS_BAD_CALL:  str = s(SSL_ECH_STATUS_BAD_CALL);  break;
-      case SSL_ECH_STATUS_TOOMANY:   str = s(SSL_ECH_STATUS_TOOMANY);   break;
       case SSL_ECH_STATUS_GREASE:    str = s(SSL_ECH_STATUS_GREASE);    break;
       default:                       str = "ECH status unknown";        break;
     }
