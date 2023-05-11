@@ -531,13 +531,13 @@ ssl_tlsext_status_cb(SSL *ssl, void *arg)
 static void ech_key_status_trace (server * const srv, SSL_CTX * const ssl_ctx)
 {
     int numkeys = 0;
-    int ksrv = SSL_CTX_ech_server_key_status(ssl_ctx, &numkeys);
+    int ksrv = SSL_CTX_ech_server_get_key_status(ssl_ctx, &numkeys);
     if (ksrv != 1)
         log_error(srv->errh, __FILE__, __LINE__,
-          "SSL: SSL_CTX_ech_server_key_status failed (%d)", ksrv);
+          "SSL: SSL_CTX_ech_server_get_key_status failed (%d)", ksrv);
     else
         log_error(srv->errh, __FILE__, __LINE__,
-          "SSL: SSL_CTX_ech_server_key_status number of keys loaded %d",
+          "SSL: SSL_CTX_ech_server_get_key_status number of keys loaded %d",
           numkeys);
 }
 #endif
@@ -560,7 +560,7 @@ mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, 
      */
     if (s->ech_keydir_refresh_interval <= 0) {
         int nkeys = 0;
-        if (1 != SSL_CTX_ech_server_key_status(s->ssl_ctx, &nkeys) || nkeys > 0)
+        if (1 != SSL_CTX_ech_server_get_key_status(s->ssl_ctx, &nkeys) || nkeys > 0)
             return 1;
     }
 
@@ -590,15 +590,16 @@ mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, 
 
         buffer_append_path_len(b, ep->d_name, nlen);    /* *.ech */
 
-        if (1 == SSL_CTX_ech_server_enable(s->ssl_ctx, b->ptr)) {
+        if (1 == SSL_CTX_ech_server_enable_file(s->ssl_ctx, b->ptr,
+                    SSL_ECH_USE_FOR_RETRY)) {
           #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
             log_error(srv->errh, __FILE__, __LINE__,
-              "SSL: SSL_CTX_ech_server_enable() worked for %s", b->ptr);
+              "SSL: SSL_CTX_ech_server_enable_dir() worked for %s", b->ptr);
           #endif
         }
         else {
             log_error(srv->errh, __FILE__, __LINE__,
-              "SSL: SSL_CTX_ech_server_enable() failed for %s", b->ptr);
+              "SSL: SSL_CTX_ech_server_enable_dir() failed for %s", b->ptr);
             rc = 0;
         }
 
@@ -661,7 +662,7 @@ static void ech_status_trace(request_st *r, SSL *ssl)
 }
 
 static unsigned int
-mod_openssl_ech_cb (SSL * const ssl, char * const str)
+mod_openssl_ech_cb (SSL *ssl, const char *str)
 {
     /*(callback is run after successful ECH extension decryption)*/
     UNUSED(ssl);
@@ -1686,7 +1687,7 @@ mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
 
     const unsigned char *name;
     size_t len, slen;
-  #ifdef TLSEXT_TYPE_ech
+  #ifdef TLSEXT_TYPE_ech13
     /* code currently inactive; see top of file #undef SSL_CLIENT_HELLO_SUCCESS.
      * Were the openssl ECH callback (set with SSL_CTX_set_ech_callback()) to
      * become something other than what it currently is (mainly informational),
@@ -1697,7 +1698,7 @@ mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
      * of servername_callback (set with SSL_CTX_set_tlsext_servername_callback)
      * was needed to handle SNI, but might now be folded into cert_cb. */
    #if 0
-    if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_ech, &name, &len)) {
+    if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_ech13, &name, &len)) {
         return SSL_CLIENT_HELLO_SUCCESS; /* defer to later ECH processing */
     }
    #endif
@@ -3267,7 +3268,7 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
         mod_openssl_session_ticket_key_check(p, log_epoch_secs);
   #endif
 
-  #ifdef TLSEXT_TYPE_ech
+  #ifdef TLSEXT_TYPE_ech13
     if (rc == HANDLER_GO_ON && ssl_is_init)
         mod_openssl_refresh_ech_keys(srv, p, log_epoch_secs);
   #endif
@@ -4418,7 +4419,7 @@ TRIGGER_FUNC(mod_openssl_handle_trigger) {
     mod_openssl_refresh_stapling_files(srv, p, cur_ts);
   #endif
 
-  #ifdef TLSEXT_TYPE_ech
+  #ifdef TLSEXT_TYPE_ech13
     mod_openssl_refresh_ech_keys(srv, p, cur_ts);
   #endif
 
