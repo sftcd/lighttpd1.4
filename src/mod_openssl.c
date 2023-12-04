@@ -1687,7 +1687,7 @@ mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
 
     const unsigned char *name;
     size_t len, slen;
-  #ifdef TLSEXT_TYPE_ech13
+  #ifdef TLSEXT_TYPE_ech
     /* code currently inactive; see top of file #undef SSL_CLIENT_HELLO_SUCCESS.
      * Were the openssl ECH callback (set with SSL_CTX_set_ech_callback()) to
      * become something other than what it currently is (mainly informational),
@@ -1698,7 +1698,7 @@ mod_openssl_client_hello_cb (SSL *ssl, int *al, void *srv)
      * of servername_callback (set with SSL_CTX_set_tlsext_servername_callback)
      * was needed to handle SNI, but might now be folded into cert_cb. */
    #if 0
-    if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_ech13, &name, &len)) {
+    if (SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_ech, &name, &len)) {
         return SSL_CLIENT_HELLO_SUCCESS; /* defer to later ECH processing */
     }
    #endif
@@ -3268,7 +3268,7 @@ mod_openssl_set_defaults_sockets(server *srv, plugin_data *p)
         mod_openssl_session_ticket_key_check(p, log_epoch_secs);
   #endif
 
-  #ifdef TLSEXT_TYPE_ech13
+  #ifdef TLSEXT_TYPE_ech
     if (rc == HANDLER_GO_ON && ssl_is_init)
         mod_openssl_refresh_ech_keys(srv, p, log_epoch_secs);
   #endif
@@ -4419,7 +4419,7 @@ TRIGGER_FUNC(mod_openssl_handle_trigger) {
     mod_openssl_refresh_stapling_files(srv, p, cur_ts);
   #endif
 
-  #ifdef TLSEXT_TYPE_ech13
+  #ifdef TLSEXT_TYPE_ech
     mod_openssl_refresh_ech_keys(srv, p, cur_ts);
   #endif
 
