@@ -1,0 +1,146 @@
+Format: 1.8
+Date: Mon, 22 Jan 2024 14:39:21 +0100
+Source: lighttpd
+Binary: lighttpd lighttpd-dbgsym lighttpd-doc lighttpd-mod-authn-gssapi lighttpd-mod-authn-gssapi-dbgsym lighttpd-mod-authn-pam lighttpd-mod-authn-pam-dbgsym lighttpd-mod-authn-sasl lighttpd-mod-authn-sasl-dbgsym lighttpd-mod-deflate lighttpd-mod-deflate-dbgsym lighttpd-mod-gnutls lighttpd-mod-gnutls-dbgsym lighttpd-mod-maxminddb lighttpd-mod-maxminddb-dbgsym lighttpd-mod-mbedtls lighttpd-mod-mbedtls-dbgsym lighttpd-mod-nss lighttpd-mod-nss-dbgsym lighttpd-mod-openssl lighttpd-mod-openssl-dbgsym lighttpd-mod-vhostdb-pgsql lighttpd-mod-vhostdb-pgsql-dbgsym lighttpd-mod-webdav lighttpd-mod-webdav-dbgsym lighttpd-mod-wolfssl lighttpd-mod-wolfssl-dbgsym lighttpd-modules-dbi lighttpd-modules-dbi-dbgsym lighttpd-modules-ldap lighttpd-modules-ldap-dbgsym lighttpd-modules-lua lighttpd-modules-lua-dbgsym lighttpd-modules-mysql lighttpd-modules-mysql-dbgsym
+Architecture: amd64 all
+Version: 1.4.74.27.gd7467c23-20240309.222852432163016
+Distribution: testing
+Urgency: medium
+Maintainer: Debian lighttpd maintainers <team+lighttpd@tracker.debian.org>
+Changed-By: Jochen Sprickerhof <jspricke@debian.org>
+Description:
+ lighttpd   - fast webserver with minimal memory footprint
+ lighttpd-doc - documentation for lighttpd
+ lighttpd-mod-authn-gssapi - GSSAPI authentication module for lighttpd
+ lighttpd-mod-authn-pam - PAM authentication module for lighttpd
+ lighttpd-mod-authn-sasl - SASL authentication module for lighttpd
+ lighttpd-mod-deflate - HTTP response compression module for lighttpd
+ lighttpd-mod-gnutls - TLS support using GnuTLS module for lighttpd
+ lighttpd-mod-maxminddb - GeoIP2 info module for lighttpd
+ lighttpd-mod-mbedtls - TLS support using mbedTLS module for lighttpd
+ lighttpd-mod-nss - TLS support using NSS crypto module for lighttpd
+ lighttpd-mod-openssl - TLS support using OpenSSL module for lighttpd
+ lighttpd-mod-vhostdb-pgsql - PostgreSQL-based virtual host configuration module for lighttpd
+ lighttpd-mod-webdav - WebDAV module for lighttpd
+ lighttpd-mod-wolfssl - TLS support using wolfSSL module for lighttpd
+ lighttpd-modules-dbi - DBI-based modules for lighttpd
+ lighttpd-modules-ldap - LDAP-based modules for lighttpd
+ lighttpd-modules-lua - LUA-based modules for lighttpd
+ lighttpd-modules-mysql - MySQL-based modules for lighttpd
+Changes:
+ lighttpd (1.4.74.27.gd7467c23-20240309.222852432163016) UNRELEASED; urgency=medium
+ .
+   ** SNAPSHOT build @75b7edca **
+ .
+   * Add ECH patch
+Checksums-Sha1:
+ ebffef346f3a42c74eb648e22b0d876c91a2e5f5 908312 lighttpd-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ a62dd194c1285806f44d0a8ecc140af0e5a4e3d9 50824 lighttpd-doc_1.4.74.27.gd7467c23-20240309.222852432163016_all.deb
+ 6b2576002b59fe796669cb0f0714d33a688e54d8 27544 lighttpd-mod-authn-gssapi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 3dbcdb4f420bf632cb5d26be0f00406db0aeea58 8180 lighttpd-mod-authn-gssapi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ e21e63dd1cfb731249d8ad0f71bf0638d4d2fc10 14344 lighttpd-mod-authn-pam-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ ca9f0017e313643e6d938c2e8d6668e4a98e0ae5 3636 lighttpd-mod-authn-pam_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ b7391b8ab6751ccba16a63f63edf83bee9813f76 16364 lighttpd-mod-authn-sasl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ d2c915bc6de6e3e0d396c1daba17f7d076626bf1 4380 lighttpd-mod-authn-sasl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 30eeedc72137992fedbe442e585986bcb2f54ba7 38304 lighttpd-mod-deflate-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 96d4865c5acb0dd165c6febc8f5d030eff2b3caa 12276 lighttpd-mod-deflate_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 550b886e0463f34e76cee18662da447d3deeff90 55920 lighttpd-mod-gnutls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ c9a1b1e97ece712e4d5b81f2defe72c4fa543cce 19752 lighttpd-mod-gnutls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 388d971b60e602dfecf0fb005e87f398be566f5a 18572 lighttpd-mod-maxminddb-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 215b7c6e2d0c186a154157e76573888ba3e6702c 4992 lighttpd-mod-maxminddb_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 20ad14f398df85a7b676bc7b312926786164cab3 60624 lighttpd-mod-mbedtls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ daea8c76ebbaa478582539b1f0990945929dda08 19864 lighttpd-mod-mbedtls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 618938058e8fcfb9ad7f2c1e49a02da57f7c9625 64408 lighttpd-mod-nss-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ c2ea699f54ebadd70ebde4e0582fd7ed72c67f5d 20616 lighttpd-mod-nss_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ ee2a39c7f529f2e72a278abe35455c9cc7f72bb0 60368 lighttpd-mod-openssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ dab3b6ddf05983c065aabab1ade69809ee064df1 21900 lighttpd-mod-openssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ d38156efe3034522b062a9fb9821fb51ed6df18a 15700 lighttpd-mod-vhostdb-pgsql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 681bfc420a05d21524d1d7f8adf7d6ef367d4889 4240 lighttpd-mod-vhostdb-pgsql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 47adfef7928b473d1fd936a45106a459542bf3ca 93760 lighttpd-mod-webdav-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 01d64b6333737211e5df050cd9d9ac0249d31ed3 27032 lighttpd-mod-webdav_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 924e7e40c66832c5db8a882481f8923481a9e928 69284 lighttpd-mod-wolfssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 8d25c10d2c13743744ab5e48f313212b81146a96 19872 lighttpd-mod-wolfssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ fa0a529ede6a7e0e0f98e456b14ebfb39fa95cc2 34824 lighttpd-modules-dbi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ d95eb169da0032e0d3ba44b9bf9a6803f114fb04 7832 lighttpd-modules-dbi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ f5390dcc22a21439253355a9ba67e2eecef8556d 42752 lighttpd-modules-ldap-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 88fa822fc4d09008a46b9276d6c5b36070dbb6ba 10616 lighttpd-modules-ldap_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ c3dad1d6da5af335a07f25b3a68bc34c4096cfed 68716 lighttpd-modules-lua-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 0d2c14d8fff4fecebc9922760b3a03d2dbe43642 22792 lighttpd-modules-lua_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 8f65a925cd90847ed4bc34e54ccaf70ca352cd72 25116 lighttpd-modules-mysql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 182cf33cd892cce89d55ff3e85e63305ed37787d 4488 lighttpd-modules-mysql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ e4155b03799f3b09552f2787976f17042d5b82cd 22395 lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.buildinfo
+ f3410719b2b76f50ec464986a0bd558693703b16 361376 lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+Checksums-Sha256:
+ 906ce7a4676dde292616599ec666316f6e8b44c4e30eda0fe023305fd9c9fb69 908312 lighttpd-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ ef5208d1ea22fd51261831562d637433ff38b1c44b538d17cff423bca2d51f54 50824 lighttpd-doc_1.4.74.27.gd7467c23-20240309.222852432163016_all.deb
+ 971157711c91dd49dd75ec35936823d62244e71e89dfc6fa66070f708c14fe79 27544 lighttpd-mod-authn-gssapi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 772b78d05ab8037d870e3ef821174f41ad1ba581d9da55563ab8eeec98d8ab04 8180 lighttpd-mod-authn-gssapi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 5f755136bda0d296cf6f11e7d0fd538fdc493eb809bc20f8c36ec5dec117918a 14344 lighttpd-mod-authn-pam-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 04abafb018a475498a0f4b595b53ed74a7007a59d1186917bfc19450abdcd76e 3636 lighttpd-mod-authn-pam_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 92f04e65bdbfa16615a7656b657ba7b6605a021ed5d7b6713cacecbe7bac0538 16364 lighttpd-mod-authn-sasl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 15529ce6d4301bb79794969ca6b74a111c5e64ee8f06be8049d452c8a7b2bd8e 4380 lighttpd-mod-authn-sasl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ cedefcf53dddad00696880bcd9617c801f332cc26c7ed7154fb1a1ec12c36d75 38304 lighttpd-mod-deflate-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 57375355d3b372c6129da1193b0ea6a62b1698203fb99af00a2893b38c3420cd 12276 lighttpd-mod-deflate_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 5ee1f5ea6567c7ab4125ccdb5b828f3ddd4dd2ac0849aea888be716102e856db 55920 lighttpd-mod-gnutls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 7fa8a1c858e45e0ae5bdd3db7b5e98ae1b8e5844be8a8891ff0e96abc35c059b 19752 lighttpd-mod-gnutls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 90c568cd018f7978b5da71b0451c9ed2de33424820ee25559b20483f9a5a107c 18572 lighttpd-mod-maxminddb-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 91739269d62dca5f7a5fcdca210cda09a230f647074f78ac30bf418a4725582e 4992 lighttpd-mod-maxminddb_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ fe1b934187028a0aa3b810920ce6c219847aa48d513832f09ba2a633c5afcf9f 60624 lighttpd-mod-mbedtls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 8b8799a6dfd591b341cf42eeccf7e6f445d6975ddf93d7acccfcc2ee80e1890f 19864 lighttpd-mod-mbedtls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 479fee1015d0cd30a3c3c25c11266d760a23a75bfe08ab12b45dc935d8e7f011 64408 lighttpd-mod-nss-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 6466f66b1c8fab178c9368098ea5b2ce6ebcf4e0d544dc38c5dba92968d7284e 20616 lighttpd-mod-nss_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 3e0caa5960efffd3e592238aad4afb5e0cd53daf56a055fa29ee4f28a1e3e213 60368 lighttpd-mod-openssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 693b58120b3cf53c294ee0c7a7e09baaccf7567a1c0504ab7140cca76360ddf8 21900 lighttpd-mod-openssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 3aea91c89256b5d98b70d6b58b6bbcaf35443f817b1f3e40b97668fdba8e0734 15700 lighttpd-mod-vhostdb-pgsql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 29c194f06792bb8a2b5cd2a4e2cf910396bf927081b1a4915c3e1b796da139d4 4240 lighttpd-mod-vhostdb-pgsql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 8d0777cdb133bd2441c4766d140c2546b75f27d9951f1259384a46de20e4ab52 93760 lighttpd-mod-webdav-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ e724b3bbe16cdbf2702e1f967ea83c46cd60813e531a941b26c63dd55544d99c 27032 lighttpd-mod-webdav_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ cd34c5860494b3b807ee4d69cbd2c054f3ea3eaa42aabee8e963ed4cb944ab9f 69284 lighttpd-mod-wolfssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 39164829f601d84fcd007a487e3f47a92766c73d778c8d29fad62d18c149a31f 19872 lighttpd-mod-wolfssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 243f7aad6a2da3bd9e25da63fc617fc53add7d2bf2d16dcc2556713d7648433c 34824 lighttpd-modules-dbi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ c59e12ef45c7777240498b14bbb5a764326f15dbc950d5e06b7a33c1751a7a9c 7832 lighttpd-modules-dbi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 2d75b0a056b3154946b662d4fa1adbf46d3b1a0e049258b6f8a7a69be014c228 42752 lighttpd-modules-ldap-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 90ccb339c50845a73daf3f0f0fe2b4f5b7aa168f2b5ddb5336ca7272309468e9 10616 lighttpd-modules-ldap_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ eeb7647b954186e463c49cf94a037da3cdabbb0d6140c72ace063a37f9b6935f 68716 lighttpd-modules-lua-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 63908331c112f2a5599dc7bef5d817ddcfeb281bd3478aac2b0505af17f95e10 22792 lighttpd-modules-lua_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ cd3ee4bf623c6ca7c298a384307185eb04b17379964acaee3fbcc68d3e164987 25116 lighttpd-modules-mysql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 8746de69d5923f7d0d41a49a5fcbbb3e2a23a464abd06c35688a7f8b50fb13ce 4488 lighttpd-modules-mysql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 0f2a5a42fb2fe1c04c6aae60dde1e13a947b015de84c8bb65f3b0330be03ef3f 22395 lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.buildinfo
+ 770e28733e6362801e98d34161e178c5de0ca0519217256f348a16926a318dd2 361376 lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+Files:
+ 6f12d572b7ea49fa17cc02662a852f91 908312 debug optional lighttpd-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 6c21f56d0b611c8e663c96f4dfd9fc80 50824 doc optional lighttpd-doc_1.4.74.27.gd7467c23-20240309.222852432163016_all.deb
+ 59cc0b9ddf5f643f9e7edc53be8fb159 27544 debug optional lighttpd-mod-authn-gssapi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ a62b0930ae8d76dd6efb1848519a8514 8180 httpd optional lighttpd-mod-authn-gssapi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 060c5e22fca020a3b5c720739092a35a 14344 debug optional lighttpd-mod-authn-pam-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 56fb4c4c05b32b3d13c14c492cac4b27 3636 httpd optional lighttpd-mod-authn-pam_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 91bc7d9bddc7e6b2634204d2eac66b84 16364 debug optional lighttpd-mod-authn-sasl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 4256b10a96f39d41101e9d9bc9c71543 4380 httpd optional lighttpd-mod-authn-sasl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 93f89f2ea020364bed22a5da5c5bc0ef 38304 debug optional lighttpd-mod-deflate-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 3bd87ccb2ab335a0888b5ce831e9cb66 12276 httpd optional lighttpd-mod-deflate_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ a20b30104c7aa469c77143536e3791f7 55920 debug optional lighttpd-mod-gnutls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 03393a76195cc505c133f75be81d39f1 19752 httpd optional lighttpd-mod-gnutls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 5f272b1fe952f77eee331a00770e92b3 18572 debug optional lighttpd-mod-maxminddb-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 7c71be94c7e86ee763527ff9db1b5d28 4992 httpd optional lighttpd-mod-maxminddb_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 961b207cadb3d0a57312523ee96a7a33 60624 debug optional lighttpd-mod-mbedtls-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 2aa7c15b474d38706525fd7bb1f8f710 19864 httpd optional lighttpd-mod-mbedtls_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 4c0acb77dd25e6b43223ca5fc006c73f 64408 debug optional lighttpd-mod-nss-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 6251aa6702caa6b98220c9f15d658f30 20616 httpd optional lighttpd-mod-nss_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 89db37e6395fc5c1668addf37315e71f 60368 debug optional lighttpd-mod-openssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 0b36d63d507d3aefe69b6e637bdc579c 21900 httpd optional lighttpd-mod-openssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 34c81184b6dadb4358a1e376cae17977 15700 debug optional lighttpd-mod-vhostdb-pgsql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ ee1eaafcaec77868990fd19cdd581bc9 4240 httpd optional lighttpd-mod-vhostdb-pgsql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 9927fdcf5a0a2b310ea8ffa5369005d8 93760 debug optional lighttpd-mod-webdav-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 4bfdd5840296f6b56f26e300d67271d5 27032 httpd optional lighttpd-mod-webdav_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 9365a9f142d4cbc110466a7ff895fcca 69284 debug optional lighttpd-mod-wolfssl-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ b9e3b80b7be68ab4a96849f01915880b 19872 httpd optional lighttpd-mod-wolfssl_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 548a339f0688fa553a61ed84424632fe 34824 debug optional lighttpd-modules-dbi-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 65a10b9d3e6c84ac79d0da490d14f675 7832 httpd optional lighttpd-modules-dbi_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 6f472f4333ed6dfd4ab43a7ae6603cee 42752 debug optional lighttpd-modules-ldap-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ f599a13a647d02975bee2b3a0e281ef5 10616 httpd optional lighttpd-modules-ldap_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 6ff6ace2fa7a0f6bd336b6cfdc91343f 68716 debug optional lighttpd-modules-lua-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 3018634a140788e146454bf89ef890cf 22792 httpd optional lighttpd-modules-lua_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 46821ae79589d7b1a9e41874d840e720 25116 debug optional lighttpd-modules-mysql-dbgsym_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ 351ba6a2151ae29c2eab203fa19e45a3 4488 httpd optional lighttpd-modules-mysql_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
+ e495d7bd51c1b8620d334778b60d85f4 22395 httpd optional lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.buildinfo
+ d329945c2614530e31671c6d265ae26e 361376 httpd optional lighttpd_1.4.74.27.gd7467c23-20240309.222852432163016_amd64.deb
