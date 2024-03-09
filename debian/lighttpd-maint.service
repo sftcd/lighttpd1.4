@@ -1,0 +1,36 @@
+[Unit]
+Description=lighttpd maintenance tasks
+RequiresMountsFor=/var/cache
+ConditionPathExists=/etc/cron.daily/lighttpd
+
+[Service]
+User=www-data
+Type=oneshot
+ExecStart=/etc/cron.daily/lighttpd
+
+# reference: logrotate.service
+
+# performance options
+Nice=19
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# hardening options
+#  details: https://www.freedesktop.org/software/systemd/man/systemd.exec.html
+#  no ProtectHome for userdir logs
+#  no PrivateNetwork for mail delivery
+#  no NoNewPrivileges for third party rotate scripts
+#  no RestrictSUIDSGID for creating setgid directories
+LockPersonality=true
+MemoryDenyWriteExecute=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+RestrictNamespaces=true
+RestrictRealtime=true

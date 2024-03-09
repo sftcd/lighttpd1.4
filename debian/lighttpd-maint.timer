@@ -1,0 +1,12 @@
+[Unit]
+Description=timer for lighttpd maintenance tasks
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+AccuracySec=1h
+RandomizedDelaySec=60
+FixedRandomDelay=true
+
+[Install]
+WantedBy=timers.target

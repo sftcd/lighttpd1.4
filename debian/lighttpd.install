@@ -1,0 +1,27 @@
+debian/tmp/usr/sbin/*
+debian/tmp/usr/share/man/*
+debian/tmp/usr/lib/lighttpd/mod_accesslog.so
+debian/tmp/usr/lib/lighttpd/mod_ajp13.so
+debian/tmp/usr/lib/lighttpd/mod_auth.so
+debian/tmp/usr/lib/lighttpd/mod_authn_file.so
+debian/tmp/usr/lib/lighttpd/mod_cgi.so
+debian/tmp/usr/lib/lighttpd/mod_dirlisting.so
+debian/tmp/usr/lib/lighttpd/mod_extforward.so
+debian/tmp/usr/lib/lighttpd/mod_h2.so
+debian/tmp/usr/lib/lighttpd/mod_proxy.so
+debian/tmp/usr/lib/lighttpd/mod_rrdtool.so
+debian/tmp/usr/lib/lighttpd/mod_sockproxy.so
+debian/tmp/usr/lib/lighttpd/mod_ssi.so
+debian/tmp/usr/lib/lighttpd/mod_status.so
+debian/tmp/usr/lib/lighttpd/mod_userdir.so
+debian/tmp/usr/lib/lighttpd/mod_vhostdb.so
+debian/tmp/usr/lib/lighttpd/mod_wstunnel.so
+debian/lighttpd.conf                        /etc/lighttpd
+debian/conf-available/*                     /etc/lighttpd/conf-available
+doc/scripts/create-mime.conf.pl             /usr/share/lighttpd/
+debian/include-conf-enabled.pl              /usr/share/lighttpd/
+debian/use-ipv6.pl                          /usr/share/lighttpd/
+debian/lighty-enable-mod                    /usr/sbin/
+debian/index.html                           /usr/share/lighttpd/
+debian/lighttpd.tmpfile.conf                /usr/lib/tmpfiles.d/
+doc/systemd/lighttpd.service                /lib/systemd/system/

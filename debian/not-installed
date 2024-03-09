@@ -1,0 +1,2 @@
+debian/tmp/changelog
+debian/tmp/usr/lib/lighttpd/mod_*.la

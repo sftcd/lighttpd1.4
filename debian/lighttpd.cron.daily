@@ -1,0 +1,17 @@
+#!/bin/sh
+
+cd /
+
+if [ "$(id -u)" = 0 ]
+then
+    exec /usr/sbin/runuser -u www-data /etc/cron.daily/lighttpd
+fi
+
+# Cleanup lighttpd compress cache
+cache=/var/cache/lighttpd
+if test -d "$cache/compress"; then
+    /usr/bin/find "$cache/compress" -ignore_readdir_race -type f -atime +30 -delete
+fi
+if test -d "$cache/uploads"; then
+    /usr/bin/find "$cache/uploads" -ignore_readdir_race -type f -atime +1 -delete
+fi

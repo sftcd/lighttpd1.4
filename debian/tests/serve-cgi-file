@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -uex
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+DOCROOT="$AUTOPKGTEST_TMP/docroot"
+CONF="$AUTOPKGTEST_TMP/lighttpd.conf"
+mkdir -p "$DOCROOT"
+cat >"$CONF" <<EOF
+server.document-root = "$DOCROOT"
+server.modules += ("mod_cgi")
+cgi.assign = (".cgi" => "")
+EOF
+
+SCRIPT="test.cgi"
+cat >"$DOCROOT/$SCRIPT" <<EOF
+#!/bin/sh
+printf "Status: 200\n\n"
+EOF
+chmod a+x "$DOCROOT/$SCRIPT"
+
+# validate test configuration
+lighttpd -tt -f "$CONF"
+
+OUTPUT=$(printf "GET /$SCRIPT HTTP/1.0\r\n\r\n" | \
+         lighttpd -1 -f "$CONF" 2>/dev/null | head -1)
+test "$OUTPUT" = "$(printf "HTTP/1.0 200 OK\r\n")"

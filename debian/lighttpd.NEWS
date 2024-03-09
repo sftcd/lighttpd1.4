@@ -1,0 +1,14 @@
+lighttpd (1.4.69-1) unstable; urgency=medium
+
+  This version removes "mini-application" lighttpd modules for which
+  mod_magnet lua implementations are better and more flexible:
+    mod_evasive, mod_secdownload, mod_uploadprogress, mod_usertrack
+  (lighttpd 1.4.68 removed these modules, as announced in lighttpd
+   release notes throughout 2022)
+  Replacements:
+    https://wiki.lighttpd.net/ModMagnetExamples#lua-mod_evasive
+    https://wiki.lighttpd.net/ModMagnetExamples#lua-mod_secdownload
+    https://wiki.lighttpd.net/ModMagnetExamples#lua-mod_uploadprogress
+    https://wiki.lighttpd.net/ModMagnetExamples#lua-mod_usertrack
+
+ -- Glenn Strauss <gstrauss@gluelogic.com>  Tue, 20 Sep 2022 10:25:11 +0000

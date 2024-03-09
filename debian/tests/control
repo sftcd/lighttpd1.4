@@ -1,0 +1,22 @@
+Tests: defconfig
+Depends: lighttpd, media-types
+Restrictions: needs-root
+
+Tests: load-all-modules
+Depends: lighttpd, lighttpd-modules-ldap, lighttpd-modules-lua, lighttpd-modules-mysql, lighttpd-mod-webdav, lighttpd-mod-authn-gssapi, lighttpd-mod-authn-pam, lighttpd-mod-authn-sasl, lighttpd-mod-deflate, lighttpd-mod-maxminddb, lighttpd-modules-dbi, lighttpd-mod-vhostdb-pgsql
+
+Tests: serve-static-file
+Depends: lighttpd, curl
+Restrictions: allow-stderr
+
+Tests: serve-cgi-file
+Depends: lighttpd
+Restrictions: allow-stderr
+
+Tests: do-not-emit-http-proxy-to-cgi
+Depends: lighttpd
+Restrictions: allow-stderr
+
+Tests: integration-tests
+Depends: lighttpd, lighttpd-mod-deflate, perl, gcc, libc-dev
+Restrictions: allow-stderr, skip-not-installable

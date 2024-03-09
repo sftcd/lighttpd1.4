@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -uex
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+cp -r tests src "$AUTOPKGTEST_TMP/"
+cd "$AUTOPKGTEST_TMP/tests"
+gcc fcgi-responder.c -o fcgi-responder
+gcc scgi-responder.c -o scgi-responder
+export LIGHTTPD_EXE_PATH="/usr/sbin/lighttpd"
+export VERBOSE=1
+./prepare.sh && echo && ./run-tests.pl

@@ -1,0 +1,6 @@
+Bug-Database: https://redmine.lighttpd.net/projects/lighttpd/issues
+Bug-Submit: https://redmine.lighttpd.net/projects/lighttpd/wiki/HowToReportABug
+Documentation: https://redmine.lighttpd.net/projects/lighttpd/wiki
+Repository: https://git.lighttpd.net/lighttpd/lighttpd1.4.git
+Repository-Browse: https://git.lighttpd.net/lighttpd/lighttpd1.4.git
+Security-Contact: security@lighttpd.net

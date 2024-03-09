@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -uex
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+PORT=8888
+DOCROOT="$AUTOPKGTEST_TMP/docroot"
+CONF="$AUTOPKGTEST_TMP/lighttpd.conf"
+mkdir -p "$DOCROOT"
+cat >"$CONF" <<EOF
+server.document-root = "$DOCROOT"
+server.port = $PORT
+EOF
+echo canary > "$DOCROOT/test.txt"
+
+# validate test configuration
+lighttpd -tt -f "$CONF"
+
+lighttpd -D -f "$CONF" &
+LIGHTTPD_PID=$!
+trap 'kill "$LIGHTTPD_PID"' EXIT
+
+sleep 1
+OUTPUT=$(curl "http://127.0.0.1:$PORT/test.txt")
+test "$OUTPUT" = canary

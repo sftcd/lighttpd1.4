@@ -1,0 +1,2 @@
+debian/tmp/usr/lib/lighttpd/mod_mbedtls.so
+debian/conf-available2/10-mbedtls.conf etc/lighttpd/conf-available

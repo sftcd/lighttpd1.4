@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -ue
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+/usr/share/lighttpd/create-mime.conf.pl -v >/dev/null
+/etc/init.d/lighttpd configtest

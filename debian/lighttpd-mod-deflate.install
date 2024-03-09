@@ -1,0 +1,2 @@
+debian/tmp/usr/lib/lighttpd/mod_deflate.so
+debian/conf-available2/20-deflate.conf etc/lighttpd/conf-available

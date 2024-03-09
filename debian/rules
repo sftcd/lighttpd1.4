@@ -1,0 +1,86 @@
+#!/usr/bin/make -f
+
+# build under UTF-8
+LC_ALL := C.UTF-8
+export LC_ALL
+
+# enable verbose mode
+export DH_VERBOSE=1
+
+# enable all hardening build flags
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+
+# non-executable stack
+export DEB_CFLAGS_MAINT_APPEND=-Wa,--noexecstack
+export DEB_LDFLAGS_MAINT_APPEND=-Wl,-z,noexecstack
+
+%:
+	dh $@
+
+override_dh_clean:
+	dh_clean
+	find . -name Makefile.in -delete
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--disable-dependency-tracking \
+		--libdir=/usr/lib/lighttpd \
+		--libexecdir="/usr/lib/lighttpd" \
+		--with-attr \
+		--with-brotli \
+		--with-dbi \
+		--with-gnutls \
+		--with-krb5 \
+		--with-ldap \
+		--with-libdeflate \
+		--with-lua=lua5.4 \
+		--with-maxminddb \
+		--with-mbedtls \
+		--with-mysql \
+		--with-nettle \
+		--with-nss \
+		--with-openssl \
+		--with-pam \
+		--with-pcre2 \
+		--with-pgsql \
+		--with-sasl \
+		--with-webdav-locks \
+		--with-webdav-props \
+		--with-wolfssl \
+		--with-xxhash \
+		--with-zstd \
+		$(if $(filter pkg.lighttpd.libunwind,$(DEB_BUILD_PROFILES)),--with-libunwind) \
+		CFLAGS_FOR_BUILD="$(shell dpkg-buildflags --get CFLAGS)" \
+		LDFLAGS_FOR_BUILD="$(shell dpkg-buildflags --get LDFLAGS)" \
+		CPPFLAGS_FOR_BUILD="$(shell dpkg-buildflags --get CPPFLAGS)" \
+
+override_dh_install:
+	cp NEWS debian/tmp/changelog
+	dh_install
+
+override_dh_missing:
+	dh_missing --fail-missing
+
+override_dh_installdocs:
+	dh_installdocs -Nlighttpd -Nlighttpd-doc --link-doc=lighttpd
+	dh_installdocs -plighttpd -plighttpd-doc
+
+override_dh_fixperms-arch:
+	dh_fixperms
+	chmod 0750 debian/lighttpd/var/log/lighttpd
+	chown www-data:www-data \
+			debian/lighttpd/var/cache/lighttpd \
+			debian/lighttpd/var/cache/lighttpd/compress \
+			debian/lighttpd/var/cache/lighttpd/uploads \
+			debian/lighttpd/var/log/lighttpd
+
+override_dh_installinit:
+	dh_installinit --error-handler=start_failed
+
+override_dh_gencontrol:
+	set -e; for p in `dh_listpackages`; do \
+		test -d debian/$$p/usr/lib/lighttpd || continue; \
+		m=`ls debian/$$p/usr/lib/lighttpd | sed 'y/_/-/;s/^mod-\(.*\)\.so$$/lighttpd-mod-\1,/;ta;d;:a /^'"$$p"',$$/d;' | xargs`; \
+		echo "lighttpd:ModuleProvides=$$m" >> debian/$$p.substvars; \
+	done
+	dh_gencontrol

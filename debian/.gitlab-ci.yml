@@ -1,0 +1,7 @@
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+
+variables:
+  # https://manpages.debian.org/unstable/reprotest/reprotest.1.en.html#Domain_or_host
+  SALSA_CI_REPROTEST_ARGS: --vary=domain_host.use_sudo=1

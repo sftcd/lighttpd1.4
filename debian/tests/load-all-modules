@@ -1,0 +1,30 @@
+#!/bin/sh
+
+set -ue
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+CONF="$AUTOPKGTEST_TMP/lighttpd.conf"
+(
+	cat <<EOF
+server.document-root = "$AUTOPKGTEST_TMP"
+server.modules = (
+	# must be loaded before mod_cgi
+	"mod_indexfile",
+	# must be loaded before mod_ajp13
+	"mod_auth",
+EOF
+	(
+		cd /usr/lib/lighttpd
+		for mod in *.so; do
+			mod=${mod%.so}
+			test "$mod" = mod_indexfile && continue
+			test "$mod" = mod_auth && continue
+			echo "\"${mod%.so}\","
+		done
+	)
+	echo ")"
+) > "$CONF"
+
+lighttpd -tt -f "$CONF" 2>"$AUTOPKGTEST_TMP/stderr"
+grep -v 'Warning: mod_[^ ]* is deprecated and will be removed from a future lighttpd release in early' "$AUTOPKGTEST_TMP/stderr" 1>&2 || test "$?" = 1
