@@ -546,6 +546,8 @@ static void ech_key_status_trace (server * const srv, SSL_CTX * const ssl_ctx)
 static int
 mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, const time_t cur_ts)
 {
+    OSSL_ECHSTORE *es = NULL;
+
     if (NULL == s->ech_keydir
         || s->ech_keydir_refresh_ts + s->ech_keydir_refresh_interval > cur_ts)
         return 1;
@@ -554,26 +556,36 @@ mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, 
     ech_key_status_trace(srv, s->ssl_ctx);
   #endif
 
-    if (s->ech_keydir_refresh_interval <= 0) {
+    es = SSL_CTX_get1_echstore(s->ssl_ctx);
+    if (es != NULL && s->ech_keydir_refresh_interval <= 0) {
         int nkeys = 0;
-        if (1 != SSL_CTX_ech_server_get_key_status(s->ssl_ctx, &nkeys)
-            || nkeys > 0)
+
+        if (1 == OSSL_ECHSTORE_num_keys(es, &nkeys)
+            && nkeys > 0) {
             /* Nothing to do if refresh time is disabled (zero or negative)
              * and keys already loaded */
+            OSSL_ECHSTORE_free(es);
             return 1;
+        }
+    }
+    if (es == NULL) {
+        es = OSSL_ECHSTORE_new(NULL, NULL);
+        if (es == NULL) 
+            log_error(srv->errh, __FILE__, __LINE__,
+              "SSL: OSSL_ECHSTORE_new failed");
     }
 
-    int rc = SSL_CTX_ech_server_flush_keys(s->ssl_ctx,
-                                           s->ech_keydir_refresh_interval+5);
+    int rc = OSSL_ECHSTORE_flush_keys(es, s->ech_keydir_refresh_interval+5);
     if (1 != rc)
         log_error(srv->errh, __FILE__, __LINE__,
-          "SSL: SSL_CTX_ech_server_flush_keys failed (%d)", rc);
+          "SSL: OSSL_ECHSTORE_flush_keys failed (%d)", rc);
 
     buffer * const b = s->ech_keydir;
     const uint32_t dirlen = buffer_string_length(b);
     DIR * const dp = opendir(b->ptr);
     if (NULL == dp) {
         log_perror(srv->errh,__FILE__,__LINE__,"%s dir:%s",__func__,b->ptr);
+        OSSL_ECHSTORE_free(es);
         return 0;
     }
 
@@ -589,23 +601,28 @@ mod_openssl_refresh_ech_keys_ctx (server * const srv, plugin_ssl_ctx * const s, 
 
         buffer_append_path_len(b, ep->d_name, nlen);    /* *.ech */
 
-        if (1 == SSL_CTX_ech_server_enable_file(s->ssl_ctx, b->ptr,
-                                                SSL_ECH_USE_FOR_RETRY)) {
+        BIO *in = BIO_new_file(b->ptr, "r");
+        if (in != NULL
+            && 1 == OSSL_ECHSTORE_read_pem(es, in, OSSL_ECH_FOR_RETRY)) {
           #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
             log_error(srv->errh, __FILE__, __LINE__,
-              "SSL: SSL_CTX_ech_server_enable_file() worked for %s", b->ptr);
+              "SSL: OSSL_ECHSTORE_read_pem () worked for %s", b->ptr);
           #endif
         }
         else {
             log_error(srv->errh, __FILE__, __LINE__,
-              "SSL: SSL_CTX_ech_server_enable_file() failed for %s", b->ptr);
+              "SSL: OSSL_ECHSTORE_read_pem () failed for %s", b->ptr);
             rc = 0;
         }
+        BIO_free_all(in);
 
         buffer_string_set_length(b, dirlen);
     }
 
     closedir(dp);
+
+    rc = SSL_CTX_set1_echstore(s->ssl_ctx, es);
+    OSSL_ECHSTORE_free(es);
 
   #ifdef LIGHTTPD_OPENSSL_ECH_DEBUG
     ech_key_status_trace(srv, s->ssl_ctx);
@@ -664,7 +681,7 @@ static void ech_status_trace(request_st *r, SSL *ssl)
 {
     char *sni_ech = NULL;
     char *sni_clr = NULL;
-    int status = SSL_ech_get_status(ssl, &sni_ech, &sni_clr);
+    int status = SSL_ech_get1_status(ssl, &sni_ech, &sni_clr);
     const char *str = ech_status_str(status);
     const char *ech = sni_ech ? sni_ech : "";
     const char *clr = sni_clr ? sni_clr : "";
@@ -765,7 +782,7 @@ mod_openssl_ech_only_policy_check (request_st * const r, handler_ctx * const hct
     char *sni_ech = NULL;
     char *sni_clr = NULL;
     handler_t rc = HANDLER_GO_ON;
-    switch (SSL_ech_get_status(hctx->ssl, &sni_ech, &sni_clr)) {
+    switch (SSL_ech_get1_status(hctx->ssl, &sni_ech, &sni_clr)) {
       case SSL_ECH_STATUS_SUCCESS:
         /* require that request :authority (Host) match SNI in ECH to avoid one
          * ECH-provided host testing for existence of another ECH-only host.
@@ -1658,7 +1675,7 @@ mod_openssl_SNI (handler_ctx *hctx, const char *servername, size_t len)
          * there is a need for such complex behavior on different ports.) */
         char *sni_ech = NULL;
         char *sni_clr = NULL;
-        int rc = SSL_ech_get_status(hctx->ssl, &sni_ech, &sni_clr);
+        int rc = SSL_ech_get1_status(hctx->ssl, &sni_ech, &sni_clr);
         OPENSSL_free(sni_ech);
         OPENSSL_free(sni_clr);
         switch (rc) {
